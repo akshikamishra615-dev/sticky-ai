@@ -1,0 +1,17 @@
+{
+  "name": "Sticky AI",
+  "short_name": "Sticky AI",
+  "description": "An AI-powered learning and productivity application.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#6366f1",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+module.exports = {
+  apps: [
+    {
+      name: 'sticky-ai',
+      script: 'npm',
+      args: 'start',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '2G',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 3000
+      }
+    }
+  ]
+};

@@ -1,26 +1,95 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
+@theme {
   --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-border: var(--border);
+  
+  --color-primary: var(--primary-text);
+  --color-secondary: var(--secondary-text);
+  --color-muted: var(--muted-text);
+  
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-ai: var(--ai-accent);
+  --color-ai-fg: var(--ai-accent-fg);
+  
+  --color-success: var(--success);
+  --color-success-fg: var(--success-fg);
+  --color-warning: var(--warning);
+  --color-warning-fg: var(--warning-fg);
+  --color-error: var(--error);
+  --color-error-fg: var(--error-fg);
+  
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  
+  --animate-wave: wave 2.5s infinite;
+
+  @keyframes wave {
+    0% { transform: rotate(0deg); }
+    10% { transform: rotate(14deg); }
+    20% { transform: rotate(-8deg); }
+    30% { transform: rotate(14deg); }
+    40% { transform: rotate(-4deg); }
+    50% { transform: rotate(10deg); }
+    60%, 100% { transform: rotate(0deg); }
+  }
+}
+
+:root {
+  --background: #f8fafc; /* slate-50 */
+  --surface: #ffffff; /* white */
+  --elevated: #ffffff;
+  --border: #e2e8f0; /* slate-200 */
+  
+  --primary-text: #0f172a; /* slate-900 */
+  --secondary-text: #475569; /* slate-600 */
+  --muted-text: #94a3b8; /* slate-400 */
+  
+  --accent: #0f172a; /* slate-900 */
+  --accent-fg: #ffffff;
+  --ai-accent: #6366f1; /* indigo-500 */
+  --ai-accent-fg: #ffffff;
+  
+  --success: #10b981; /* emerald-500 */
+  --success-fg: #ffffff;
+  --warning: #f59e0b; /* amber-500 */
+  --warning-fg: #ffffff;
+  --error: #ef4444; /* red-500 */
+  --error-fg: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #020617; /* slate-950 */
+    --surface: #0f172a; /* slate-900 */
+    --elevated: #1e293b; /* slate-800 */
+    --border: #334155; /* slate-700 */
+    
+    --primary-text: #f8fafc; /* slate-50 */
+    --secondary-text: #cbd5e1; /* slate-300 */
+    --muted-text: #64748b; /* slate-500 */
+    
+    --accent: #f8fafc; /* slate-50 */
+    --accent-fg: #0f172a; /* slate-900 */
+    --ai-accent: #818cf8; /* indigo-400 */
+    --ai-accent-fg: #0f172a;
+    
+    --success: #34d399; /* emerald-400 */
+    --success-fg: #022c22;
+    --warning: #fbbf24; /* amber-400 */
+    --warning-fg: #451a03;
+    --error: #f87171; /* red-400 */
+    --error-fg: #450a0a;
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--background);
+  color: var(--primary-text);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
