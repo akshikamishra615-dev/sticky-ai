@@ -70,10 +70,15 @@ function getGroqModel() {
   return groq(modelName);
 }
 
-export async function generateEducationalNote(subject: string, topic: string, config: { style?: string, instructions?: string }) {
+export async function generateEducationalNote(subject: string, topic: string, config: { style?: string, instructions?: string, educationMetadata?: Record<string, string> }) {
+  const taxonomyContext = config.educationMetadata 
+    ? Object.entries(config.educationMetadata).map(([k, v]) => `${k.charAt(0).toUpperCase() + k.slice(1)}: ${v}`).join('\n')
+    : '';
+
   const prompt = `Generate an educational study note for a student.
 Subject: ${subject}
 Topic: ${topic}
+${taxonomyContext ? `\n--- EDUCATION CONTEXT ---\n${taxonomyContext}\n----------------------\n` : ''}
 Style preference: ${config.style || 'General Study'}
 Additional instructions: ${config.instructions || 'None'}
 

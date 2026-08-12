@@ -4,6 +4,8 @@ import { X, Sparkles, ChevronRight, CheckCircle2, Paperclip, Loader2 } from "luc
 import { Button } from "@/components/ui/button";
 import { NoteViewer } from "./note-viewer";
 import { generateNoteAction } from "@/lib/actions/ai-actions";
+import { EducationTaxonomySelector, type EducationMetadata } from "./education-taxonomy-selector";
+import { BackButton } from "@/components/ui/back-button";
 
 interface CreateNoteFlowProps {
   onClose: () => void;
@@ -16,8 +18,8 @@ export function CreateNoteFlow({ onClose, onSave }: CreateNoteFlowProps) {
   const [step, setStep] = React.useState<Step>(1);
   
   // Form State
-  const [subject, setSubject] = React.useState(subjects[1]); // Default to first actual subject
-  const [topic, setTopic] = React.useState("");
+  const [metadata, setMetadata] = React.useState<EducationMetadata>({ educationLevel: "" });
+  const [isMetadataValid, setIsMetadataValid] = React.useState(false);
   const [instructions, setInstructions] = React.useState("");
   const [style, setStyle] = React.useState("Detailed Study Notes");
   
@@ -29,7 +31,9 @@ export function CreateNoteFlow({ onClose, onSave }: CreateNoteFlowProps) {
     setStep(3); // Loading state
     setError(null);
     try {
-      const response = await generateNoteAction(subject, topic, { style, instructions });
+      const subject = metadata.subject || "General";
+      const topic = metadata.topic || "Topic";
+      const response = await generateNoteAction(subject, topic, { style, instructions, educationMetadata: metadata });
       
       if (!response.success || !response.note) {
         throw new Error(response.error || "Failed to generate note.");
@@ -67,15 +71,10 @@ export function CreateNoteFlow({ onClose, onSave }: CreateNoteFlowProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] bg-[var(--surface)] shrink-0">
         <div className="flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-[var(--ai-accent)]" />
+          <BackButton fallbackHref="/notes" onClick={onClose} />
+          <Sparkles className="w-5 h-5 ml-2 text-[var(--ai-accent)]" />
           <h2 className="text-lg font-bold text-[var(--primary-text)]">Create AI Note</h2>
         </div>
-        <button 
-          onClick={onClose}
-          className="p-2 rounded-full hover:bg-[var(--elevated)] text-[var(--muted-text)] hover:text-[var(--primary-text)] transition-colors"
-        >
-          <X className="w-5 h-5" />
-        </button>
       </div>
 
       {/* Progress Bar */}
@@ -98,35 +97,17 @@ export function CreateNoteFlow({ onClose, onSave }: CreateNoteFlowProps) {
               </div>
 
               <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-semibold text-[var(--primary-text)] mb-2">Subject</label>
-                  <select 
-                    value={subject}
-                    onChange={(e) => setSubject(e.target.value)}
-                    className="w-full p-3 border border-[var(--border)] rounded-xl bg-[var(--surface)] text-[var(--primary-text)] focus:ring-2 focus:ring-[var(--ai-accent)] focus:border-transparent outline-none"
-                  >
-                    {subjects.filter(s => s !== "All Subjects").map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-semibold text-[var(--primary-text)] mb-2">Topic</label>
-                  <input 
-                    type="text"
-                    placeholder="e.g. Dynamic Programming, Cellular Respiration"
-                    value={topic}
-                    onChange={(e) => setTopic(e.target.value)}
-                    className="w-full p-3 border border-[var(--border)] rounded-xl bg-[var(--surface)] text-[var(--primary-text)] focus:ring-2 focus:ring-[var(--ai-accent)] focus:border-transparent outline-none placeholder-[var(--muted-text)]"
-                  />
-                </div>
+                <EducationTaxonomySelector 
+                  metadata={metadata} 
+                  onChange={setMetadata} 
+                  isValid={setIsMetadataValid} 
+                />
               </div>
 
               <div className="flex justify-end pt-4">
                 <Button 
                   onClick={() => setStep(2)} 
-                  disabled={!topic.trim()}
+                  disabled={!isMetadataValid}
                   className="bg-[var(--primary-text)] text-[var(--background)] hover:opacity-90"
                 >
                   Continue <ChevronRight className="w-4 h-4 ml-1" />
@@ -224,7 +205,7 @@ export function CreateNoteFlow({ onClose, onSave }: CreateNoteFlowProps) {
                   </div>
                   <h3 className="text-xl font-bold text-[var(--primary-text)] mb-2">Sticky AI is creating your notes</h3>
                   <p className="text-[var(--secondary-text)] max-w-sm">
-                    Analyzing {topic} and structuring it for {style.toLowerCase()}...
+                    Analyzing {metadata.topic || "your topic"} and structuring it for {style.toLowerCase()}...
                   </p>
                 </>
               )}

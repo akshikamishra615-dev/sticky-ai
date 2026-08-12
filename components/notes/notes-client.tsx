@@ -6,6 +6,7 @@ import { NotesToolbar } from "@/components/notes/notes-toolbar";
 import { NotesGrid } from "@/components/notes/notes-grid";
 import { CreateNoteFlow } from "@/components/notes/create-note-flow";
 import { NoteViewer } from "@/components/notes/note-viewer";
+import { BackButton } from "@/components/ui/back-button";
 import { type Note } from "@/lib/mock-notes";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -144,14 +145,11 @@ export function NotesClient({ initialNotes }: NotesClientProps) {
           {/* Viewer Toolbar */}
           <div className="sticky top-0 z-10 bg-[var(--background)]/80 backdrop-blur-md border-b border-[var(--border)] px-4 sm:px-8 py-4 mb-8">
             <div className="max-w-3xl mx-auto flex justify-between items-center">
-              <Button 
-                variant="ghost" 
-                onClick={handleBackToLibrary}
-                className="text-[var(--secondary-text)] hover:text-[var(--primary-text)] group"
-              >
-                <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />
-                Back to Library
-              </Button>
+              <BackButton 
+                fallbackHref="/notes" 
+                onClick={handleBackToLibrary} 
+                label="Back to Library" 
+              />
             </div>
           </div>
           

@@ -101,6 +101,7 @@ export function AiClient({ initialConversations }: AiClientProps) {
     }
   }, [activeConversation?.messages, isGenerating]);
 
+
   const handleSend = async (content: string, useRAG: boolean = false, language: string = "Auto Detect") => {
     if (!content.trim() || isGenerating) return;
 
@@ -264,6 +265,14 @@ export function AiClient({ initialConversations }: AiClientProps) {
       setIsGenerating(false);
     }
   };
+
+  React.useEffect(() => {
+    const dashboardQuery = sessionStorage.getItem("dashboard_ai_query");
+    if (dashboardQuery) {
+      sessionStorage.removeItem("dashboard_ai_query");
+      handleSend(dashboardQuery, false, "Auto Detect");
+    }
+  }, [handleSend]);
 
   const handleRegenerate = async (messageId: string) => {
     if (!activeId || isGenerating) return;

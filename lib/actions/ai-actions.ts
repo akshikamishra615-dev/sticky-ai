@@ -3,7 +3,7 @@
 import { auth } from "@/auth";
 import { generateEducationalNote } from "@/lib/server/ai";
 
-export async function generateNoteAction(subject: string, topic: string, config: { style?: string, instructions?: string }) {
+export async function generateNoteAction(subject: string, topic: string, config: { style?: string, instructions?: string, educationMetadata?: Record<string, string> }) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
   
