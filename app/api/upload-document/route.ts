@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import fs from "fs";
+import fsPromises from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { queueProcessDocument } from "@/lib/server/rag";
+import { rateLimiters, getIp, getRateLimitKey } from "@/lib/server/ratelimit";
 
 const UPLOAD_DIR = path.join(process.cwd(), ".data/uploads");
 if (!fs.existsSync(UPLOAD_DIR)) {
@@ -21,6 +23,19 @@ export async function POST(req: NextRequest) {
     // Fallback for local testing
     if (!userId && process.env.NODE_ENV === 'development') {
       userId = "cmskafizo0000l1boh9jfy8wi";
+    }
+
+    const ip = getIp(req);
+    const rateLimitKey = getRateLimitKey(ip, userId);
+    const { success } = await rateLimiters.upload.limit(rateLimitKey);
+    if (!success) {
+      return NextResponse.json({ success: false, error: { code: "TOO_MANY_REQUESTS", message: "Upload limit exceeded. Please try again later." } }, { status: 429 });
+    }
+
+    // Fast fail for excessively large requests (e.g. > 25MB total body) before parsing formData
+    const contentLength = req.headers.get("content-length");
+    if (contentLength && parseInt(contentLength, 10) > 25 * 1024 * 1024) {
+      return NextResponse.json({ success: false, error: { code: "PAYLOAD_TOO_LARGE", message: "Request payload too large." } }, { status: 413 });
     }
     
     if (!userId) {
@@ -70,8 +85,11 @@ export async function POST(req: NextRequest) {
     const filePath = path.join(UPLOAD_DIR, safeFilename);
 
     const startUpload = performance.now();
-    const buffer = Buffer.from(await file.arrayBuffer());
-    fs.writeFileSync(filePath, buffer);
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+    
+    // Use async file writing to prevent blocking the Node.js event loop
+    await fsPromises.writeFile(filePath, buffer);
 
     console.log(`[KB PERF] file saved in ${Math.round(performance.now() - startUpload)} ms`);
 

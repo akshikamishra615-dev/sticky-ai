@@ -2,24 +2,35 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createChatStream } from "@/lib/server/ai";
 import { NextResponse } from "next/server";
+import { rateLimiters, getIp, getRateLimitKey } from "@/lib/server/ratelimit";
 
 export async function POST(req: Request) {
   try {
     const session = await auth();
-    if (!session?.user?.id) {
+    const userId = session?.user?.id;
+
+    const ip = getIp(req);
+    const rateLimitKey = getRateLimitKey(ip, userId);
+    
+    const { success } = await rateLimiters.ai.limit(rateLimitKey);
+    if (!success) {
+      return new NextResponse("Too Many Requests", { status: 429 });
+    }
+
+    if (!userId) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
     const body = await req.json();
     const { conversationId, messages, useRAG, language } = body as { conversationId: string, messages: { role: 'user' | 'assistant', content: string }[], useRAG?: boolean, language?: string };
 
-    if (!conversationId || !messages || messages.length === 0) {
+    if (!conversationId || !messages || !Array.isArray(messages) || messages.length === 0) {
       return new NextResponse("Bad Request", { status: 400 });
     }
 
     // Protect input length (e.g., max 2000 chars for the latest user message)
     const latestMessage = messages[messages.length - 1];
-    if (latestMessage.role !== 'user' || latestMessage.content.length > 2000) {
+    if (latestMessage.role !== 'user' || typeof latestMessage.content !== 'string' || latestMessage.content.length > 2000) {
       return new NextResponse("Invalid message or message too long", { status: 400 });
     }
 
@@ -28,15 +39,20 @@ export async function POST(req: Request) {
       where: { id: conversationId }
     });
 
-    if (!conversation || conversation.userId !== session.user.id) {
+    if (!conversation || conversation.userId !== userId) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    // Map to CoreMessage and enforce strict limit on context (last 10 messages)
-    const contextMessages = messages.slice(-10).map(m => ({
-      role: m.role,
-      content: m.content
-    }));
+    // Map to CoreMessage, enforce strict limit on context (last 10 messages), and validate roles at runtime
+    const contextMessages = messages.slice(-10).map(m => {
+      if (m.role !== 'user' && m.role !== 'assistant') {
+        throw new Error("Invalid message role");
+      }
+      return {
+        role: m.role,
+        content: String(m.content)
+      };
+    });
 
     // Save the user's latest message to the database (only if it's the actual new one)
     // Wait, the client handles the saving in ai-client.tsx via saveMessage?
@@ -48,20 +64,20 @@ export async function POST(req: Request) {
     // The instruction says: "Save AI response to PostgreSQL within the onFinish callback."
     // Let's just do the stream and save the AI response.
     console.log("[AI Chat Route] Request received for conversation:", conversationId);
-    console.log("[AI Chat Route] Authenticated user exists. ID length:", session.user.id?.length);
+    console.log("[AI Chat Route] Authenticated user exists. ID length:", userId?.length);
     console.log("[AI Chat Route] Conversation ownership verified.");
     console.log("[AI Chat Route] Context messages count:", contextMessages.length);
     
     // Fetch user profile for personalization
     const profile = await prisma.profile.findUnique({
-      where: { userId: session.user.id }
+      where: { userId: userId }
     });
     
     let ragContext: string | undefined = undefined;
     if (useRAG && latestMessage.role === 'user') {
       try {
         const { searchKnowledgeBase } = await import("@/lib/server/rag");
-        const chunks = await searchKnowledgeBase(latestMessage.content, session.user.id);
+        const chunks = await searchKnowledgeBase(latestMessage.content, userId);
         
         if (chunks && chunks.length > 0) {
           ragContext = chunks.map(c => `[From Document: ${c.metadata?.documentName || 'Unknown'}]\n${c.content}`).join('\n\n');

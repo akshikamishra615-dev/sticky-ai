@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { rateLimiters, getIp, getRateLimitKey } from "@/lib/server/ratelimit";
 
 export async function POST(req: NextRequest) {
   try {
     const session = await auth();
-    if (!session?.user?.id && process.env.NODE_ENV !== 'development') {
+    const userId = session?.user?.id;
+
+    const ip = getIp(req);
+    const rateLimitKey = getRateLimitKey(ip, userId);
+    const { success } = await rateLimiters.ai.limit(rateLimitKey);
+    if (!success) {
+      return NextResponse.json({ success: false, error: "Too Many Requests" }, { status: 429 });
+    }
+
+    if (!userId && process.env.NODE_ENV !== 'development') {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 

@@ -2,9 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendPasswordResetEmail } from "@/lib/server/email";
 import crypto from "crypto";
+import { rateLimiters, getIp } from "@/lib/server/ratelimit";
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = getIp(req);
+    const { success } = await rateLimiters.auth.limit(ip);
+    if (!success) {
+      return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
+    }
+
     const { email } = await req.json();
     if (!email || typeof email !== "string") {
       return NextResponse.json({ error: "Invalid email" }, { status: 400 });
