@@ -20,7 +20,10 @@ When appropriate, suggest:
 - Related concepts
 
 Do not pretend to know information you are uncertain about.
-For academic questions, prioritize correctness.`;
+For academic questions, prioritize correctness.
+
+You MUST output your response in JSON format.
+Ensure that your JSON strictly matches the requested structure.`;
 
 export const noteSchema = z.object({
   title: z.string(),
@@ -108,9 +111,31 @@ Ensure the content is factually accurate, well-structured, and genuinely topic-s
     model: getGroqModel(),
     system: systemPrompt,
     schema: noteSchema,
-    // @ts-expect-error mode is supported at runtime but missing in type definitions
-    mode: 'tool',
-    prompt: prompt
+    providerOptions: {
+      groq: {
+        structuredOutputs: false
+      }
+    },
+    prompt: `${prompt}
+    
+You MUST output a JSON object exactly matching this structure:
+{
+  "title": "string",
+  "subject": "string",
+  "topic": "string",
+  "description": "string",
+  "sections": [
+    {
+      "title": "string",
+      "content": "string"
+    }
+  ],
+  "visualLearning": {
+    "type": "table | flowchart | diagram | concept_map | timeline",
+    "content": "string"
+  } // or null
+}
+`
   });
 
   return result.object;
@@ -121,9 +146,26 @@ export async function generateQuiz(topic: string, difficulty: string) {
     model: getGroqModel(),
     system: systemPrompt,
     schema: quizSchema,
-    // @ts-expect-error mode is supported at runtime but missing in type definitions
-    mode: 'tool',
-    prompt: `Generate a multiple choice quiz about ${topic}. Difficulty: ${difficulty}. Include 3-5 questions.`
+    providerOptions: {
+      groq: {
+        structuredOutputs: false
+      }
+    },
+    prompt: `Generate a multiple choice quiz about ${topic}. Difficulty: ${difficulty}. Include 3-5 questions.
+    
+You MUST output a JSON object exactly matching this structure:
+{
+  "title": "string",
+  "questions": [
+    {
+      "question": "string",
+      "options": ["string", "string", "string", "string"],
+      "correctAnswerIndex": 0,
+      "explanation": "string"
+    }
+  ]
+}
+`
   });
   return result.object;
 }
@@ -133,9 +175,26 @@ export async function generateStudyPlan(subject: string, topic: string, timefram
     model: getGroqModel(),
     system: systemPrompt,
     schema: studyPlanSchema,
-    // @ts-expect-error mode is supported at runtime but missing in type definitions
-    mode: 'tool',
-    prompt: `Create a study plan for ${subject}: ${topic} over a timeframe of ${timeframe}.`
+    providerOptions: {
+      groq: {
+        structuredOutputs: false
+      }
+    },
+    prompt: `Create a study plan for ${subject}: ${topic} over a timeframe of ${timeframe}.
+    
+You MUST output a JSON object exactly matching this structure:
+{
+  "title": "string",
+  "sessions": [
+    {
+      "day": "string",
+      "durationMins": 30,
+      "topic": "string",
+      "tasks": ["string", "string"]
+    }
+  ]
+}
+`
   });
   return result.object;
 }
