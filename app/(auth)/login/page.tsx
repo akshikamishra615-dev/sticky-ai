@@ -73,6 +73,18 @@ function LoginForm() {
           />
         </div>
 
+        <div className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            id="rememberMe"
+            name="rememberMe"
+            className="w-4 h-4 text-[var(--ai-accent)] bg-[var(--surface)] border-[var(--border)] rounded focus:ring-[var(--ai-accent)] focus:ring-2"
+          />
+          <label htmlFor="rememberMe" className="text-sm font-medium text-[var(--primary-text)]">
+            Remember me
+          </label>
+        </div>
+
         <Button 
           type="submit" 
           disabled={loading}

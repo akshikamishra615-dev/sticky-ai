@@ -10,6 +10,7 @@ interface EducationTaxonomySelectorProps {
   metadata: EducationMetadata;
   onChange: (metadata: EducationMetadata) => void;
   isValid: (valid: boolean) => void;
+  isProfileMode?: boolean;
 }
 
 // A reusable Select + Optional "Other" Custom Input Field Component
@@ -71,7 +72,7 @@ function DynamicSelect({
   );
 }
 
-export function EducationTaxonomySelector({ metadata, onChange, isValid }: EducationTaxonomySelectorProps) {
+export function EducationTaxonomySelector({ metadata, onChange, isValid, isProfileMode }: EducationTaxonomySelectorProps) {
   const updateField = (key: string, value: string) => {
     const newData = { ...metadata, [key]: value };
     // Clear dependent fields if parent changes
@@ -95,9 +96,14 @@ export function EducationTaxonomySelector({ metadata, onChange, isValid }: Educa
   React.useEffect(() => {
     // Validation Logic
     let valid = false;
-    if (!metadata.subject?.trim() || !metadata.topic?.trim() || !level) {
-      valid = false;
-    } else if (level === "School") {
+    
+    if (isProfileMode) {
+      // In profile mode, everything is optional except the initial selection implies they want to save it
+      valid = true;
+    } else {
+      if (!metadata.subject?.trim() || !metadata.topic?.trim() || !level) {
+        valid = false;
+      } else if (level === "School") {
       valid = !!metadata.board && !!metadata.class && 
               (metadata.class === "Class 11" || metadata.class === "Class 12" ? !!metadata.stream : true);
     } else if (level === "Undergraduate" || level === "Postgraduate") {
@@ -107,8 +113,9 @@ export function EducationTaxonomySelector({ metadata, onChange, isValid }: Educa
     } else {
       valid = true; // Fallback validation for 'Other' levels
     }
+    }
     isValid(valid);
-  }, [metadata, level, isValid]);
+  }, [metadata, level, isValid, isProfileMode]);
 
   return (
     <div className="space-y-6">
@@ -240,7 +247,7 @@ export function EducationTaxonomySelector({ metadata, onChange, isValid }: Educa
         />
       )}
 
-      {level && (
+      {level && !isProfileMode && (
         <div className="space-y-4 pt-4 border-t border-[var(--border)]">
           <div>
             <label className="block text-sm font-semibold text-[var(--primary-text)] mb-2">Subject / Section</label>

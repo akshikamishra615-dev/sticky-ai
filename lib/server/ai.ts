@@ -133,9 +133,26 @@ export async function generateStudyPlan(subject: string, topic: string, timefram
   return result.object;
 }
 
-export function createChatStream(messages: { role: 'user' | 'assistant' | 'system', content: string }[], onFinish?: (args: { text: string }) => Promise<void> | void, ragContext?: string, language?: string) {
+export async function createChatStream(
+  messages: { role: 'user' | 'assistant', content: string }[],
+  options?: {
+    ragContext?: string;
+    language?: string;
+    userProfileMetadata?: Record<string, string>;
+    onFinish?: (event: { text: string }) => Promise<void> | void;
+  }
+) {
+  const { ragContext, language, userProfileMetadata, onFinish } = options || {};
+
   let finalSystemPrompt = systemPrompt;
-  
+
+  if (userProfileMetadata) {
+    const profileContext = Object.entries(userProfileMetadata)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join('\n');
+    finalSystemPrompt += `\n\nUSER PROFILE:\n${profileContext}`;
+  }
+
   if (ragContext) {
     finalSystemPrompt = `You are Sticky AI, an educational assistant.
 

@@ -13,5 +13,5 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  return <AppShell userName={session.user.name || "Student"}>{children}</AppShell>;
+  return <AppShell userName={session.user.name || "Student"} userImage={session.user.image}>{children}</AppShell>;
 }

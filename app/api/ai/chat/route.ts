@@ -47,30 +47,24 @@ export async function POST(req: Request) {
     // or we can handle saving the AI message at the end of the stream.
     // The instruction says: "Save AI response to PostgreSQL within the onFinish callback."
     // Let's just do the stream and save the AI response.
-
     console.log("[AI Chat Route] Request received for conversation:", conversationId);
     console.log("[AI Chat Route] Authenticated user exists. ID length:", session.user.id?.length);
     console.log("[AI Chat Route] Conversation ownership verified.");
     console.log("[AI Chat Route] Context messages count:", contextMessages.length);
+    
+    // Fetch user profile for personalization
+    const profile = await prisma.profile.findUnique({
+      where: { userId: session.user.id }
+    });
     
     let ragContext: string | undefined = undefined;
     if (useRAG && latestMessage.role === 'user') {
       try {
         const { searchKnowledgeBase } = await import("@/lib/server/rag");
         const chunks = await searchKnowledgeBase(latestMessage.content, session.user.id);
+        
         if (chunks && chunks.length > 0) {
-          ragContext = chunks.map(c => {
-            let metaString = "";
-            if (c.metadata) {
-              if (c.metadata.pageNumber) metaString = ` — Page ${c.metadata.pageNumber}`;
-              if (c.metadata.pages) metaString = ` — Pages ${c.metadata.pages}`;
-              if (c.metadata.slideNumber) metaString = ` — Slide ${c.metadata.slideNumber}`;
-              if (c.metadata.sheetName) metaString = ` — Sheet: ${c.metadata.sheetName}`;
-            }
-            return `[Source: ${c.documentName}${metaString}]\n${c.content}`;
-          }).join("\n\n");
-        } else {
-          ragContext = "[No relevant documents found. Tell the user you couldn't find enough information in their uploaded material to answer confidently.]";
+          ragContext = chunks.map(c => `[From Document: ${c.metadata?.documentName || 'Unknown'}]\n${c.content}`).join('\n\n');
         }
       } catch (e) {
         console.error("[AI Chat Route] RAG search failed:", e);
@@ -79,9 +73,13 @@ export async function POST(req: Request) {
 
     console.log("[AI Chat Route] Initializing Groq stream...");
 
-    const result = await createChatStream(contextMessages, async ({ text }) => {
-      console.log("[AI Chat Route] Stream onFinish triggered. Generated text length:", text.length);
-      if (text.length > 0) {
+    const result = await createChatStream(contextMessages, {
+      ragContext,
+      language,
+      userProfileMetadata: profile?.educationMetadata as Record<string, string> | undefined,
+      onFinish: async ({ text }) => {
+        console.log("[AI Chat Route] Stream onFinish triggered. Generated text length:", text.length);
+        if (text.length > 0) {
         // Save AI response to DB
         await prisma.message.create({
           data: {
@@ -94,7 +92,7 @@ export async function POST(req: Request) {
       } else {
         console.warn("[AI Chat Route] Stream finished but text is empty!");
       }
-    }, ragContext, language);
+    } });
     
     console.log("[AI Chat Route] Stream initialized. Returning text stream response.");
 
