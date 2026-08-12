@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import NextAuth from "next-auth";
+import { authConfig } from "./auth.config";
 
-import { auth } from "./auth";
+export const { auth } = NextAuth(authConfig);
 
 // Middleware to protect routes
 export default auth((req) => {
