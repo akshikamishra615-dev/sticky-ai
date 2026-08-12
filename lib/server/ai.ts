@@ -37,7 +37,7 @@ export const noteSchema = z.object({
   visualLearning: z.object({
     type: z.enum(['table', 'flowchart', 'diagram', 'concept_map', 'timeline']),
     content: z.string()
-  }).strict().nullable()
+  }).strict().nullish().default(null)
 }).strict();
 
 export const quizSchema = z.object({
