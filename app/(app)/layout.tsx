@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/layout/app-shell";
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
+import { SessionProvider } from "next-auth/react";
 
 export default async function AppLayout({
   children,
@@ -13,5 +14,11 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  return <AppShell userName={session.user.name || "Student"} userImage={session.user.image}>{children}</AppShell>;
+  return (
+    <SessionProvider session={session}>
+      <AppShell userName={session.user.name || "Student"} userImage={session.user.image}>
+        {children}
+      </AppShell>
+    </SessionProvider>
+  );
 }

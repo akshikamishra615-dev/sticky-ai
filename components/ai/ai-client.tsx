@@ -270,6 +270,7 @@ export function AiClient({ initialConversations }: AiClientProps) {
     const dashboardQuery = sessionStorage.getItem("dashboard_ai_query");
     if (dashboardQuery) {
       sessionStorage.removeItem("dashboard_ai_query");
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       handleSend(dashboardQuery, false, "Auto Detect");
     }
   }, [handleSend]);

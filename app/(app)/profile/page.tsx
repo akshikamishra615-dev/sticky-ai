@@ -24,6 +24,7 @@ export default function ProfilePage() {
 
   // Fetch initial profile data
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (session?.user?.name) setName(session.user.name);
     
     // In a real app we might fetch the profile on server and pass it as props,
