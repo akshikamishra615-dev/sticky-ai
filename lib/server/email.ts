@@ -1,17 +1,19 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY || "dummy_key");
-
 export async function sendPasswordResetEmail(email: string, resetUrl: string) {
-  if (!process.env.RESEND_API_KEY) {
+  const apiKey = process.env.RESEND_API_KEY;
+  
+  if (!apiKey) {
     console.warn("RESEND_API_KEY is not set. Simulating email send:");
     console.warn(`To: ${email}\nURL: ${resetUrl}`);
     return { success: true };
   }
 
+  const resend = new Resend(apiKey);
+
   try {
     const { data, error } = await resend.emails.send({
-      from: process.env.EMAIL_FROM || "Sticky AI <noreply@sticky-ai.com>",
+      from: process.env.EMAIL_FROM || "Sticky AI <onboarding@resend.dev>",
       to: email,
       subject: "Reset your Sticky AI password",
       html: `

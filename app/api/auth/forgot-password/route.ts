@@ -71,7 +71,14 @@ export async function POST(req: NextRequest) {
     const resetUrl = `${origin}/reset-password?token=${rawToken}`;
 
     // Send email
-    await sendPasswordResetEmail(user.email!, resetUrl);
+    const emailResult = await sendPasswordResetEmail(user.email!, resetUrl);
+    
+    if (!emailResult.success) {
+      // Safe diagnostic log without secrets
+      console.error(`Password reset email failed for user ${user.id}:`, (emailResult.error as any)?.message || "Unknown error");
+    } else {
+      console.log(`Password reset email queued successfully for user ${user.id}`);
+    }
 
     return genericResponse;
 
