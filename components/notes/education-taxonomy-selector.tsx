@@ -29,8 +29,9 @@ function DynamicSelect({
   placeholder: string;
   required?: boolean;
 }) {
-  const isOther = !options.includes(value) && value !== "";
-  const selectValue = isOther ? "Other" : value;
+  const isCustom = !options.includes(value) && value !== "" && value !== "__OTHER__";
+  const selectValue = (value === "__OTHER__" || isCustom) ? "Other" : value;
+  const inputValue = value === "__OTHER__" ? "" : (isCustom ? value : "");
 
   return (
     <div className="space-y-2 w-full animate-in fade-in slide-in-from-top-2">
@@ -40,28 +41,30 @@ function DynamicSelect({
           value={selectValue}
           onChange={(e) => {
             if (e.target.value === "Other") {
-              onChange(""); // Clear for custom input
+              onChange("__OTHER__"); 
             } else {
               onChange(e.target.value);
             }
           }}
           className="w-full p-3 pr-10 border border-[var(--border)] rounded-xl bg-[var(--surface)] text-[var(--primary-text)] focus:ring-2 focus:ring-[var(--ai-accent)] focus:border-transparent outline-none appearance-none"
-          required={required && !isOther}
+          required={required && !isCustom && value !== "__OTHER__"}
         >
           <option value="" disabled>{placeholder}</option>
-          {options.map(opt => (
+          {options.filter(opt => opt !== "Other").map(opt => (
             <option key={opt} value={opt}>{opt}</option>
           ))}
-          {!options.includes("Other") && <option value="Other">Other</option>}
+          <option value="Other">Other</option>
         </select>
         <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--muted-text)] pointer-events-none" />
       </div>
 
-      {(selectValue === "Other" || isOther) && (
+      {selectValue === "Other" && (
         <input
           type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+          value={inputValue}
+          onChange={(e) => {
+            onChange(e.target.value || "__OTHER__");
+          }}
           placeholder={`Enter custom ${label.toLowerCase()}`}
           className="w-full mt-2 p-3 border border-[var(--border)] rounded-xl bg-[var(--surface)] text-[var(--primary-text)] focus:ring-2 focus:ring-[var(--ai-accent)] focus:border-transparent outline-none"
           required={required}
@@ -96,23 +99,23 @@ export function EducationTaxonomySelector({ metadata, onChange, isValid, isProfi
   React.useEffect(() => {
     // Validation Logic
     let valid = false;
+    const hasUnfilledOther = Object.values(metadata).some(val => val === "__OTHER__");
     
     if (isProfileMode) {
-      // In profile mode, everything is optional except the initial selection implies they want to save it
-      valid = true;
+      valid = !hasUnfilledOther;
     } else {
-      if (!metadata.subject?.trim() || !metadata.topic?.trim() || !level) {
+      if (!metadata.subject?.trim() || !metadata.topic?.trim() || !level || hasUnfilledOther) {
         valid = false;
       } else if (level === "School") {
-      valid = !!metadata.board && !!metadata.class && 
-              (metadata.class === "Class 11" || metadata.class === "Class 12" ? !!metadata.stream : true);
-    } else if (level === "Undergraduate" || level === "Postgraduate") {
-      valid = !!metadata.category && !!metadata.degree && !!metadata.year;
-    } else if (level === "Competitive / Entrance Exams") {
-      valid = !!metadata.exam;
-    } else {
-      valid = true; // Fallback validation for 'Other' levels
-    }
+        valid = !!metadata.board?.trim() && !!metadata.class?.trim() && 
+                (metadata.class === "Class 11" || metadata.class === "Class 12" ? !!metadata.stream?.trim() : true);
+      } else if (level === "Undergraduate" || level === "Postgraduate") {
+        valid = !!metadata.category?.trim() && !!metadata.degree?.trim() && !!metadata.year?.trim();
+      } else if (level === "Competitive / Entrance Exams") {
+        valid = !!metadata.exam?.trim();
+      } else {
+        valid = true;
+      }
     }
     isValid(valid);
   }, [metadata, level, isValid, isProfileMode]);

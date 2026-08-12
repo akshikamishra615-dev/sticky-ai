@@ -67,22 +67,47 @@ export const educationTaxonomy: TaxonomyStructure = {
   ],
   degreesByCategory: {
     "Engineering & Technology": ["B.Tech", "BE", "M.Tech", "ME", "BCA", "MCA", "B.Sc (IT/CS)", "Other"],
-    "Medical & Dental": ["MBBS", "BDS", "BAMS", "BHMS", "MD", "MS", "Nursing", "Other"],
-    "Commerce & Management": ["B.Com", "BBA", "BMS", "M.Com", "MBA", "PGDM", "Other"],
-    "Science": ["B.Sc", "M.Sc", "Other"],
-    "Arts & Humanities": ["BA", "MA", "BFA", "MFA", "Other"],
-    "Law": ["LLB", "BA LLB", "BBA LLB", "LLM", "Other"],
-    "Pharmacy": ["B.Pharm", "M.Pharm", "D.Pharm", "Pharm.D", "Other"],
-    "Architecture": ["B.Arch", "M.Arch", "Other"]
+    "Medical & Dental": ["MBBS", "BDS", "Nursing", "Physiotherapy", "Medical Laboratory Technology", "BAMS", "BHMS", "MD", "MS", "Other"],
+    "Commerce & Management": ["B.Com", "BBA", "BBM", "BMS", "M.Com", "MBA", "PGDM", "Other"],
+    "Science": ["B.Sc", "B.Sc (Hons)", "M.Sc", "Other"],
+    "Arts & Humanities": ["BA", "BA (Hons)", "BFA", "MA", "MFA", "Other"],
+    "Law": ["LLB", "BA LLB", "BBA LLB", "B.Com LLB", "LLM", "Other"],
+    "Pharmacy": ["B.Pharm", "Pharm.D", "M.Pharm", "D.Pharm", "Other"],
+    "Architecture": ["B.Arch", "M.Arch", "Other"],
+    "Other": ["Other"]
   },
   branchesByDegree: {
-    "B.Tech": ["Computer Science (CSE)", "Electronics (ECE)", "Mechanical (ME)", "Civil (CE)", "Electrical (EEE)", "Information Technology (IT)", "Other"],
-    "BE": ["Computer Science (CSE)", "Electronics (ECE)", "Mechanical (ME)", "Civil (CE)", "Electrical (EEE)", "Information Technology (IT)", "Other"],
-    "M.Tech": ["Computer Science (CSE)", "Electronics (ECE)", "Mechanical (ME)", "Civil (CE)", "Electrical (EEE)", "Information Technology (IT)", "Other"],
-    "MBA": ["Marketing", "Finance", "Human Resources (HR)", "Operations", "Information Technology", "International Business", "Other"],
-    "B.Sc": ["Physics", "Chemistry", "Mathematics", "Biology", "Computer Science", "Other"],
-    "M.Sc": ["Physics", "Chemistry", "Mathematics", "Biology", "Computer Science", "Other"],
-    "BA": ["History", "Political Science", "Economics", "Sociology", "Psychology", "English", "Other"],
-    "MA": ["History", "Political Science", "Economics", "Sociology", "Psychology", "English", "Other"]
+    "B.Tech": [
+      "Computer Science / CSE", "Information Technology", "Electronics & Communication",
+      "Electrical Engineering", "Mechanical Engineering", "Civil Engineering",
+      "Chemical Engineering", "Artificial Intelligence & Machine Learning", "Data Science",
+      "Computer Applications", "Software Engineering", "Cyber Security", "Biotechnology",
+      "Instrumentation", "Aerospace", "Mechatronics", "Robotics", "Other"
+    ],
+    "BE": [
+      "Computer Science / CSE", "Information Technology", "Electronics & Communication",
+      "Electrical Engineering", "Mechanical Engineering", "Civil Engineering",
+      "Chemical Engineering", "Artificial Intelligence & Machine Learning", "Data Science",
+      "Computer Applications", "Software Engineering", "Cyber Security", "Biotechnology",
+      "Instrumentation", "Aerospace", "Mechatronics", "Robotics", "Other"
+    ],
+    "M.Tech": [
+      "Computer Science", "Information Technology", "Electronics & Communication",
+      "Electrical Engineering", "Mechanical Engineering", "Civil Engineering", "Other"
+    ],
+    "ME": [
+      "Computer Science", "Information Technology", "Electronics & Communication",
+      "Electrical Engineering", "Mechanical Engineering", "Civil Engineering", "Other"
+    ],
+    "B.Com": ["Accounting", "Finance", "Economics", "Business Studies", "Marketing", "Human Resource Management", "General", "Other"],
+    "BBA": ["Accounting", "Finance", "Economics", "Business Studies", "Marketing", "Human Resource Management", "General", "Other"],
+    "BBM": ["Accounting", "Finance", "Economics", "Business Studies", "Marketing", "Human Resource Management", "General", "Other"],
+    "MBA": ["Marketing", "Finance", "Human Resource Management", "Operations", "Information Technology", "International Business", "Other"],
+    "B.Sc": ["Mathematics", "Physics", "Chemistry", "Biology", "Computer Science", "Statistics", "Biotechnology", "Environmental Science", "Other"],
+    "B.Sc (Hons)": ["Mathematics", "Physics", "Chemistry", "Biology", "Computer Science", "Statistics", "Biotechnology", "Environmental Science", "Other"],
+    "M.Sc": ["Mathematics", "Physics", "Chemistry", "Biology", "Computer Science", "Statistics", "Biotechnology", "Environmental Science", "Other"],
+    "BA": ["English", "Hindi", "History", "Geography", "Political Science", "Sociology", "Psychology", "Philosophy", "Economics", "Journalism/Mass Communication", "Other"],
+    "BA (Hons)": ["English", "Hindi", "History", "Geography", "Political Science", "Sociology", "Psychology", "Philosophy", "Economics", "Journalism/Mass Communication", "Other"],
+    "MA": ["English", "Hindi", "History", "Geography", "Political Science", "Sociology", "Psychology", "Philosophy", "Economics", "Journalism/Mass Communication", "Other"]
   }
 };
