@@ -8,7 +8,8 @@ export default auth((req) => {
   const isAuthRoute = req.nextUrl.pathname.startsWith('/login') || req.nextUrl.pathname.startsWith('/signup');
   const isProtectedRoute = req.nextUrl.pathname.startsWith('/dashboard') || 
                            req.nextUrl.pathname.startsWith('/notes') || 
-                           req.nextUrl.pathname.startsWith('/ai');
+                           req.nextUrl.pathname.startsWith('/ai') ||
+                           req.nextUrl.pathname.startsWith('/profile');
 
   // If user is trying to access a protected route and is NOT logged in
   if (isProtectedRoute && !isLoggedIn) {

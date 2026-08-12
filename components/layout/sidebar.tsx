@@ -64,7 +64,7 @@ export function Sidebar() {
             </li>
             <li className="mt-auto">
               <Link
-                href="/settings"
+                href="/profile"
                 className="group -mx-2 flex gap-x-3 rounded-lg p-2.5 text-sm font-semibold leading-6 text-[var(--secondary-text)] hover:bg-[var(--elevated)] hover:text-[var(--primary-text)] transition-colors"
               >
                 <Settings
