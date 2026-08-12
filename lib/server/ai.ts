@@ -108,6 +108,8 @@ Ensure the content is factually accurate, well-structured, and genuinely topic-s
     model: getGroqModel(),
     system: systemPrompt,
     schema: noteSchema,
+    // @ts-expect-error mode is supported at runtime but missing in type definitions
+    mode: 'tool',
     prompt: prompt
   });
 
@@ -119,6 +121,8 @@ export async function generateQuiz(topic: string, difficulty: string) {
     model: getGroqModel(),
     system: systemPrompt,
     schema: quizSchema,
+    // @ts-expect-error mode is supported at runtime but missing in type definitions
+    mode: 'tool',
     prompt: `Generate a multiple choice quiz about ${topic}. Difficulty: ${difficulty}. Include 3-5 questions.`
   });
   return result.object;
@@ -129,6 +133,8 @@ export async function generateStudyPlan(subject: string, topic: string, timefram
     model: getGroqModel(),
     system: systemPrompt,
     schema: studyPlanSchema,
+    // @ts-expect-error mode is supported at runtime but missing in type definitions
+    mode: 'tool',
     prompt: `Create a study plan for ${subject}: ${topic} over a timeframe of ${timeframe}.`
   });
   return result.object;
