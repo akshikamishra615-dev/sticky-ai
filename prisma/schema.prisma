@@ -68,16 +68,17 @@ model User {
 }
 
 model Profile {
-  id             String   @id @default(cuid())
-  userId         String   @unique
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  educationLevel String?
-  institution    String?
-  interests      String[]
+  educationLevel    String?
+  institution       String?
+  educationMetadata Json?
+  interests         String[]
   
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model Note {
