@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     
     if (!emailResult.success) {
       // Safe diagnostic log without secrets
-      console.error(`Password reset email failed for user ${user.id}:`, (emailResult.error as any)?.message || "Unknown error");
+      console.error(`Password reset email failed for user ${user.id}:`, (emailResult.error as Error)?.message || "Unknown error");
     } else {
       console.log(`Password reset email queued successfully for user ${user.id}`);
     }

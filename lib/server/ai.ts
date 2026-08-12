@@ -30,12 +30,12 @@ export const noteSchema = z.object({
   sections: z.array(z.object({
     title: z.string(),
     content: z.string()
-  })),
+  }).strict()),
   visualLearning: z.object({
     type: z.enum(['table', 'flowchart', 'diagram', 'concept_map', 'timeline']),
     content: z.string()
-  }).optional()
-});
+  }).strict().nullable()
+}).strict();
 
 export const quizSchema = z.object({
   title: z.string(),
@@ -44,8 +44,8 @@ export const quizSchema = z.object({
     options: z.array(z.string()),
     correctAnswerIndex: z.number(),
     explanation: z.string()
-  }))
-});
+  }).strict())
+}).strict();
 
 export const studyPlanSchema = z.object({
   title: z.string(),
@@ -54,8 +54,8 @@ export const studyPlanSchema = z.object({
     durationMins: z.number(),
     topic: z.string(),
     tasks: z.array(z.string())
-  }))
-});
+  }).strict())
+}).strict();
 
 function getGroqModel() {
   const modelName = process.env.GROQ_MODEL;
@@ -100,6 +100,7 @@ Follow this structure strictly:
 
 VISUAL LEARNING:
 If the topic benefits from a visual representation (like a table, flowchart, timeline, or concept map), generate a 'visualLearning' object. Use simple Markdown formatting inside the visual content string (e.g., Markdown tables or textual flow arrows like A -> B -> C). Do NOT use image URLs.
+If a visual representation is not needed, you MUST output null for the 'visualLearning' field.
 
 Ensure the content is factually accurate, well-structured, and genuinely topic-specific.`;
 
