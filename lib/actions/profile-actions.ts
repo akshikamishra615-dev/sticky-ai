@@ -56,6 +56,26 @@ export async function removeProfileImage() {
   if (!session?.user?.id) throw new Error("Unauthorized");
   
   try {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { image: true }
+    });
+
+    if (user?.image?.includes("res.cloudinary.com") && user.image.includes("sticky-ai/profiles")) {
+      try {
+        const parts = user.image.split("sticky-ai/profiles/");
+        if (parts.length === 2) {
+          const filenameWithExt = parts[1];
+          const publicId = "sticky-ai/profiles/" + filenameWithExt.split(".")[0];
+          // Dynamically import to avoid running Cloudinary config logic unnecessarily in other server actions
+          const { deleteFromCloudinary } = await import("@/lib/server/cloudinary");
+          await deleteFromCloudinary(publicId);
+        }
+      } catch (e) {
+        console.error("Failed to delete Cloudinary image during removal:", e);
+      }
+    }
+
     await prisma.user.update({
       where: { id: session.user.id },
       data: { image: null }
