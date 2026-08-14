@@ -54,7 +54,9 @@ async function processNext() {
 
 export async function queueProcessDocument(documentId: string, filePath: string, userId: string) {
   processingQueue.push(() => processDocument(documentId, filePath, userId));
-  processNext();
+  setTimeout(() => {
+    processNext().catch(err => console.error("[KB ERROR] unhandled processNext error:", err));
+  }, 0);
 }
 
 async function processDocument(documentId: string, filePath: string, userId: string) {
