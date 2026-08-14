@@ -4,80 +4,63 @@ import { createWorker, Worker } from "tesseract.js";
 import path from 'path';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.js';
 
-let workerPromise: Promise<Worker> | null = null;
-
-async function getWorker(): Promise<Worker> {
-  if (!workerPromise) {
-    workerPromise = (async () => {
-      console.log("[IMAGE PERF] initializing Tesseract worker for PDF");
-      const start = performance.now();
-      const workerPath = path.join(process.cwd(), 'node_modules/tesseract.js/src/worker-script/node/index.js');
-      const w = await createWorker(['eng', 'hin'], 1, { workerPath });
-      console.log(`[IMAGE PERF] Tesseract worker ready in ${Math.round(performance.now() - start)} ms`);
-      return w;
-    })();
-  }
-  return workerPromise;
-}
-
 const MAX_OCR_PAGES = 10;
+const MAX_IMAGE_PIXELS = 3000 * 4000; // ~12 million pixels max (roughly 300dpi letter)
 
 export async function parsePDF(buffer: Buffer, onOcrScanning?: () => Promise<void>): Promise<ParsedChunk[]> {
-  const pdfModule = await import("pdf-parse");
-  const pdf = pdfModule.default || pdfModule;
-  
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let pdfData: any = null;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    pdfData = await (pdf as any)(buffer);
-  } catch (err) {
-    console.warn("[KB] pdf-parse failed, will attempt OCR fallback if possible.", err);
-  }
-  
-  const text = pdfData?.text?.trim() || "";
-  
-  // If we found meaningful text (e.g., more than 50 chars), it's a normal PDF
-  if (text.length > 50) {
-    // Help GC clear the huge pdfData object early
-    const pages = pdfData.numpages;
-    pdfData = null; 
-    return [{
-      text: text,
-      metadata: { pages }
-    }];
-  }
-
-  // Clear pdfData from memory before starting OCR
-  pdfData = null;
-
-  // FALLBACK: OCR for scanned PDF
-  console.log(`[KB PERF] PDF text too short (${text.length} chars). Falling back to OCR...`);
-  
-  if (onOcrScanning) {
-    await onOcrScanning();
-  }
-
   const uint8Array = new Uint8Array(buffer);
   const pdfDoc = await pdfjs.getDocument({ data: uint8Array }).promise;
   
+  let worker: Worker | null = null;
+  
   try {
     const numPages = pdfDoc.numPages;
-    
-    if (numPages > MAX_OCR_PAGES) {
-      throw { 
-        code: "OCR_PAGE_LIMIT_EXCEEDED", 
-        message: `This scanned document has ${numPages} pages, which exceeds the maximum OCR limit of ${MAX_OCR_PAGES} pages. Please upload a smaller document or a text-based PDF.` 
-      };
-    }
-
     const chunks: ParsedChunk[] = [];
-    const worker = await getWorker();
-
+    let ocrPageCount = 0;
+    
     for (let i = 1; i <= numPages; i++) {
       const page = await pdfDoc.getPage(i);
       
       try {
+        const textContent = await page.getTextContent();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const pageText = textContent.items.map((item: any) => item.str).join(" ").trim();
+        
+        if (pageText.length > 50) {
+          chunks.push({
+            text: pageText,
+            metadata: {
+              sourceType: "PDF",
+              pageNumber: i,
+              extractionMethod: "TEXT"
+            }
+          });
+          continue;
+        }
+
+        // --- PAGE REQUIRES OCR ---
+        ocrPageCount++;
+        if (ocrPageCount > MAX_OCR_PAGES) {
+          throw { 
+            code: "OCR_PAGE_LIMIT_EXCEEDED", 
+            message: `This document contains more than ${MAX_OCR_PAGES} scanned pages, which exceeds the maximum OCR limit. Please upload a text-based PDF or a smaller scanned document.` 
+          };
+        }
+
+        console.log(`[KB PERF] PDF Page ${i} has insufficient text (${pageText.length} chars). Falling back to OCR...`);
+        
+        if (onOcrScanning && ocrPageCount === 1) {
+          await onOcrScanning();
+        }
+
+        if (!worker) {
+          console.log("[IMAGE PERF] initializing local Tesseract worker for PDF");
+          const workerStart = performance.now();
+          const workerPath = path.join(process.cwd(), 'node_modules/tesseract.js/src/worker-script/node/index.js');
+          worker = await createWorker(['eng', 'hin'], 1, { workerPath });
+          console.log(`[IMAGE PERF] Tesseract worker ready in ${Math.round(performance.now() - workerStart)} ms`);
+        }
+
         const ops = await page.getOperatorList();
         
         for (let j = 0; j < ops.fnArray.length; j++) {
@@ -90,8 +73,24 @@ export async function parsePDF(buffer: Buffer, onOcrScanning?: () => Promise<voi
           try {
             if (ops.fnArray[j] === pdfjs.OPS.paintImageXObject) {
               const objId = ops.argsArray[j][0];
-              img = await page.objs.get(objId);
+              try {
+                img = await page.objs.get(objId);
+              } catch (e) {
+                if (typeof objId === 'string' && objId.startsWith('g_')) {
+                  img = await page.commonObjs.get(objId);
+                } else {
+                  throw e;
+                }
+              }
               if (img && img.data) {
+                const numPixels = img.width * img.height;
+                if (numPixels > MAX_IMAGE_PIXELS) {
+                  throw {
+                    code: "IMAGE_RESOLUTION_TOO_HIGH",
+                    message: `Page ${i} contains an image that is too large to process (${img.width}x${img.height} pixels). Please reduce the scanning resolution or DPI and try again.`
+                  };
+                }
+                
                 imgData = img.data;
                 if (img.kind === 2 && imgData) { // Convert RGB to RGBA
                    rgba = new Uint8Array(img.width * img.height * 4);
@@ -111,7 +110,15 @@ export async function parsePDF(buffer: Buffer, onOcrScanning?: () => Promise<voi
             // @ts-expect-error - TS types are outdated for pdfjs-dist OPS
             } else if (ops.fnArray[j] === pdfjs.OPS.paintJpegXObject) {
               const objId = ops.argsArray[j][0];
-              img = await page.objs.get(objId);
+              try {
+                img = await page.objs.get(objId);
+              } catch (e) {
+                if (typeof objId === 'string' && objId.startsWith('g_')) {
+                  img = await page.commonObjs.get(objId);
+                } else {
+                  throw e;
+                }
+              }
               if (img && img.data) {
                 tesseractInput = Buffer.from(img.data);
               }
@@ -155,6 +162,14 @@ export async function parsePDF(buffer: Buffer, onOcrScanning?: () => Promise<voi
 
     return chunks;
   } finally {
+    if (worker) {
+      console.log("[IMAGE PERF] terminating Tesseract worker");
+      try {
+        await worker.terminate();
+      } catch (e) {
+        console.error("[KB ERROR] Failed to terminate worker:", e);
+      }
+    }
     // MUST destroy document to release unmanaged memory
     try {
       await pdfDoc.destroy();
