@@ -22,7 +22,7 @@ export async function getConversations() {
     title: c.title,
     messages: c.messages.map(m => ({
       id: m.id,
-      role: m.role.toLowerCase() as 'user' | 'assistant',
+      role: (m.role === 'USER' ? 'user' : 'ai') as 'user' | 'ai',
       content: m.content,
       timestamp: m.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }))

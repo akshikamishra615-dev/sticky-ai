@@ -168,7 +168,7 @@ export function AiClient({ initialConversations }: AiClientProps) {
         body: JSON.stringify({
           conversationId: currentConversationId,
           messages: updatedConversations.find(c => c.id === currentConversationId)?.messages.map(m => ({
-            role: m.role,
+            role: m.role === 'ai' ? 'assistant' : m.role,
             content: m.content
           })),
           useRAG,
