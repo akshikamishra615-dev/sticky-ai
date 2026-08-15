@@ -175,9 +175,9 @@ async function processDocument(documentId: string, filePath: string, userId: str
       data: { status: "INDEXING" }
     });
     
-    let chunkIndex = 0;
     try {
       // 5. Index into pgvector
+      let chunkIndex = 0;
       for (const chunk of embeddedChunks) {
         const vectorString = `[${chunk.vector.join(',')}]`;
         await prisma.$executeRaw`
@@ -195,23 +195,12 @@ async function processDocument(documentId: string, filePath: string, userId: str
         `;
         chunkIndex++;
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
-      const err = e as any;
-      console.error("[INDEX DIAGNOSTIC] error type:", typeof err);
-      console.error("[INDEX DIAGNOSTIC] error name:", err?.constructor?.name);
-      console.error("[INDEX DIAGNOSTIC] error:", err);
-      console.error("[INDEX DIAGNOSTIC] message:", err?.message);
-      console.error("[INDEX DIAGNOSTIC] stack:", err?.stack);
-      console.error("[INDEX DIAGNOSTIC] error.code:", err?.code);
-      console.error("[INDEX DIAGNOSTIC] error.meta:", err?.meta);
-      console.error("[INDEX DIAGNOSTIC] error.cause:", err?.cause);
-      console.error("[INDEX DIAGNOSTIC] documentId:", documentId);
-      console.error("[INDEX DIAGNOSTIC] chunks count:", embeddedChunks.length);
-      console.error("[INDEX DIAGNOSTIC] current chunkIndex:", chunkIndex);
-      
-      const currentChunk = embeddedChunks[chunkIndex] as any;
-      console.error("[INDEX DIAGNOSTIC] vector dimension:", currentChunk?.vector?.length);
-      console.error("[INDEX DIAGNOSTIC] operation:", 'INSERT INTO "DocumentChunk"');
+      console.error("[KB ERROR] stage: Indexing");
+      console.error("[KB ERROR] name:", e?.name);
+      console.error("[KB ERROR] message:", e?.message);
+      console.error("[KB ERROR] stack:", e?.stack);
       throw { code: "VECTOR_INDEXING_FAILURE", message: "We couldn't index this document. Please try again." };
     }
 
