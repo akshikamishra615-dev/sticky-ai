@@ -302,7 +302,7 @@ export function AiClient({ initialConversations }: AiClientProps) {
         body: JSON.stringify({
           conversationId: activeId,
           messages: updatedMessages.map(m => ({
-            role: m.role,
+            role: m.role === 'ai' ? 'assistant' : m.role,
             content: m.content
           })),
           useRAG: false,
