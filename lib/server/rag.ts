@@ -195,20 +195,22 @@ async function processDocument(documentId: string, filePath: string, userId: str
         `;
         chunkIndex++;
       }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
-      console.error("[INDEX DIAGNOSTIC] error type:", typeof error);
-      console.error("[INDEX DIAGNOSTIC] error name:", error?.constructor?.name);
-      console.error("[INDEX DIAGNOSTIC] error:", error);
-      console.error("[INDEX DIAGNOSTIC] message:", error?.message);
-      console.error("[INDEX DIAGNOSTIC] stack:", error?.stack);
-      console.error("[INDEX DIAGNOSTIC] error.code:", error?.code);
-      console.error("[INDEX DIAGNOSTIC] error.meta:", error?.meta);
-      console.error("[INDEX DIAGNOSTIC] error.cause:", error?.cause);
+    } catch (e: any) {
+      const err = e as any;
+      console.error("[INDEX DIAGNOSTIC] error type:", typeof err);
+      console.error("[INDEX DIAGNOSTIC] error name:", err?.constructor?.name);
+      console.error("[INDEX DIAGNOSTIC] error:", err);
+      console.error("[INDEX DIAGNOSTIC] message:", err?.message);
+      console.error("[INDEX DIAGNOSTIC] stack:", err?.stack);
+      console.error("[INDEX DIAGNOSTIC] error.code:", err?.code);
+      console.error("[INDEX DIAGNOSTIC] error.meta:", err?.meta);
+      console.error("[INDEX DIAGNOSTIC] error.cause:", err?.cause);
       console.error("[INDEX DIAGNOSTIC] documentId:", documentId);
       console.error("[INDEX DIAGNOSTIC] chunks count:", embeddedChunks.length);
       console.error("[INDEX DIAGNOSTIC] current chunkIndex:", chunkIndex);
-      console.error("[INDEX DIAGNOSTIC] vector dimension:", embeddedChunks[chunkIndex]?.vector?.length);
+      
+      const currentChunk = embeddedChunks[chunkIndex] as any;
+      console.error("[INDEX DIAGNOSTIC] vector dimension:", currentChunk?.vector?.length);
       console.error("[INDEX DIAGNOSTIC] operation:", 'INSERT INTO "DocumentChunk"');
       throw { code: "VECTOR_INDEXING_FAILURE", message: "We couldn't index this document. Please try again." };
     }
