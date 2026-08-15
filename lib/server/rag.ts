@@ -235,6 +235,15 @@ async function processDocument(documentId: string, filePath: string, userId: str
     } catch (e) {
       console.error("[KB ERROR] Fallback update failed:", e);
     }
+  } finally {
+    try {
+      if (fs.existsSync(filePath)) {
+        await fs.promises.unlink(filePath);
+        console.log(`[KB DEBUG] Cleaned up temporary file: ${filePath}`);
+      }
+    } catch (cleanupError) {
+      console.error("[KB ERROR] Failed to clean up temporary file:", cleanupError);
+    }
   }
 }
 
