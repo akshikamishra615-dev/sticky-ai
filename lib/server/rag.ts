@@ -175,9 +175,9 @@ async function processDocument(documentId: string, filePath: string, userId: str
       data: { status: "INDEXING" }
     });
     
+    let chunkIndex = 0;
     try {
       // 5. Index into pgvector
-      let chunkIndex = 0;
       for (const chunk of embeddedChunks) {
         const vectorString = `[${chunk.vector.join(',')}]`;
         await prisma.$executeRaw`
