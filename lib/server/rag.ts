@@ -20,7 +20,9 @@ async function getExtractor() {
   if (!extractorPromise) {
     const start = performance.now();
     console.log(`[KB PERF] loading Xenova model`);
-    extractorPromise = pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2').then(pipe => {
+    extractorPromise = pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2', {
+      quantized: true,
+    }).then(pipe => {
       console.log(`[KB PERF] Xenova model ready: ${Math.round(performance.now() - start)} ms`);
       return pipe;
     }).catch(err => {
