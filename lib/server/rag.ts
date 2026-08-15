@@ -123,15 +123,7 @@ async function processDocument(documentId: string, filePath: string, userId: str
       throw { code: "SCANNED_PDF_WITH_NO_TEXT", message: "No usable text chunks found in this document." };
     }
 
-    function logMem(stage: string) {
-      const mem = process.memoryUsage();
-      const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(2);
-      console.log(`[EMBED DIAGNOSTIC] ${stage.padEnd(30)} | RSS: ${mb(mem.rss)} MB | Heap: ${mb(mem.heapUsed)} MB | Ext: ${mb(mem.external)} MB | ArrBuf: ${mb(mem.arrayBuffers || 0)} MB`);
-    }
-
-    logMem("before getExtractor");
     const extractor = await getExtractor();
-    logMem("after getExtractor");
 
     console.log(`[KB PERF] embedding started`);
     const embeddingStart = performance.now();
@@ -143,17 +135,11 @@ async function processDocument(documentId: string, filePath: string, userId: str
     
     // Batch inference settings
     const batchSize = 16;
-    console.log(`[EMBED DIAGNOSTIC] Initialization complete. batchSize=${batchSize}, totalChunks=${finalChunks.length}`);
-    
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const embeddedChunks: { documentId: string, content: string, metadata: any, vector: number[] }[] = [];
     
     try {
-      let batchNumber = 1;
-      const totalBatches = Math.ceil(finalChunks.length / batchSize);
-
       for (let i = 0; i < finalChunks.length; i += batchSize) {
-        logMem(`before batch ${batchNumber}/${totalBatches}`);
         const batch = finalChunks.slice(i, i + batchSize);
         const batchTexts = batch.map(b => b.text);
         const output = await extractor(batchTexts, { pooling: 'mean', normalize: true });
@@ -167,8 +153,6 @@ async function processDocument(documentId: string, filePath: string, userId: str
             vector: batchEmbeddings[j]
           });
         }
-        logMem(`after batch ${batchNumber}/${totalBatches}`);
-        batchNumber++;
       }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
