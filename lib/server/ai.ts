@@ -20,10 +20,7 @@ When appropriate, suggest:
 - Related concepts
 
 Do not pretend to know information you are uncertain about.
-For academic questions, prioritize correctness.
-
-You MUST output your response in JSON format.
-Ensure that your JSON strictly matches the requested structure.`;
+For academic questions, prioritize correctness.`;
 
 export const noteSchema = z.object({
   title: z.string(),
