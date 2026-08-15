@@ -108,11 +108,7 @@ Ensure the content is factually accurate, well-structured, and genuinely topic-s
     model: getGroqModel(),
     system: systemPrompt,
     schema: noteSchema,
-    providerOptions: {
-      groq: {
-        structuredOutputs: false
-      }
-    },
+
     prompt: `${prompt}
     
 You MUST output a JSON object exactly matching this structure:
@@ -143,11 +139,7 @@ export async function generateQuiz(topic: string, difficulty: string) {
     model: getGroqModel(),
     system: systemPrompt,
     schema: quizSchema,
-    providerOptions: {
-      groq: {
-        structuredOutputs: false
-      }
-    },
+
     prompt: `Generate a multiple choice quiz about ${topic}. Difficulty: ${difficulty}. Include 3-5 questions.
     
 You MUST output a JSON object exactly matching this structure:
@@ -172,11 +164,7 @@ export async function generateStudyPlan(subject: string, topic: string, timefram
     model: getGroqModel(),
     system: systemPrompt,
     schema: studyPlanSchema,
-    providerOptions: {
-      groq: {
-        structuredOutputs: false
-      }
-    },
+
     prompt: `Create a study plan for ${subject}: ${topic} over a timeframe of ${timeframe}.
     
 You MUST output a JSON object exactly matching this structure:
