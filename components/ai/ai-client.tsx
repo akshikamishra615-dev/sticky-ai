@@ -16,6 +16,8 @@ const generateId = (prefix: string) => `${prefix}-${Date.now()}-${idCounter++}`;
 
 interface AiClientProps {
   initialConversations: Conversation[];
+  userName: string;
+  userImage?: string;
 }
 
 function useSelectionAutoScroll() {
@@ -77,7 +79,7 @@ function useSelectionAutoScroll() {
   }, []);
 }
 
-export function AiClient({ initialConversations }: AiClientProps) {
+export function AiClient({ initialConversations, userName, userImage }: AiClientProps) {
   useSelectionAutoScroll();
   const [conversations, setConversations] = React.useState<Conversation[]>(initialConversations);
   // Default to first conversation if it exists
@@ -444,6 +446,8 @@ export function AiClient({ initialConversations }: AiClientProps) {
                   key={msg.id} 
                   message={msg} 
                   onRegenerate={msg.role === "ai" ? handleRegenerate : undefined} 
+                  userName={userName}
+                  userImage={userImage}
                 />
               ))}
               {isGenerating && <TypingIndicator />}

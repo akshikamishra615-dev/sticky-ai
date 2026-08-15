@@ -3,7 +3,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { studentProfile, type Message } from "@/lib/mock-data";
+import { type Message } from "@/lib/mock-data";
 import { Sparkles, Copy, RotateCcw, ThumbsUp, ThumbsDown, Check } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -11,9 +11,11 @@ import remarkGfm from 'remark-gfm';
 interface ChatMessageProps {
   message: Message;
   onRegenerate?: (id: string) => void;
+  userName?: string;
+  userImage?: string;
 }
 
-export function ChatMessage({ message, onRegenerate }: ChatMessageProps) {
+export function ChatMessage({ message, onRegenerate, userName = "User", userImage }: ChatMessageProps) {
   const isAi = message.role === "ai";
   const [copied, setCopied] = React.useState(false);
   const [feedback, setFeedback] = React.useState<"up" | "down" | null>(null);
@@ -37,8 +39,8 @@ export function ChatMessage({ message, onRegenerate }: ChatMessageProps) {
             // eslint-disable-next-line @next/next/no-img-element
             <img
               className="h-8 w-8 rounded-full bg-[var(--elevated)]"
-              src={studentProfile.avatar}
-              alt={studentProfile.name}
+              src={userImage || `https://api.dicebear.com/7.x/initials/svg?seed=${userName}`}
+              alt={userName}
             />
           )}
         </div>
@@ -47,7 +49,7 @@ export function ChatMessage({ message, onRegenerate }: ChatMessageProps) {
         <div className="flex flex-col flex-1 space-y-2">
           <div className="flex items-center space-x-2">
             <span className="text-sm font-semibold text-[var(--primary-text)]">
-              {isAi ? "Sticky AI" : studentProfile.name}
+              {isAi ? "Sticky AI" : userName}
             </span>
             <span className="text-xs text-[var(--muted-text)]">{message.timestamp}</span>
           </div>
