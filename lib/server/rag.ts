@@ -196,11 +196,20 @@ async function processDocument(documentId: string, filePath: string, userId: str
         chunkIndex++;
       }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (e: any) {
-      console.error("[KB ERROR] stage: Indexing");
-      console.error("[KB ERROR] name:", e?.name);
-      console.error("[KB ERROR] message:", e?.message);
-      console.error("[KB ERROR] stack:", e?.stack);
+    } catch (error: any) {
+      console.error("[INDEX DIAGNOSTIC] error type:", typeof error);
+      console.error("[INDEX DIAGNOSTIC] error name:", error?.constructor?.name);
+      console.error("[INDEX DIAGNOSTIC] error:", error);
+      console.error("[INDEX DIAGNOSTIC] message:", error?.message);
+      console.error("[INDEX DIAGNOSTIC] stack:", error?.stack);
+      console.error("[INDEX DIAGNOSTIC] error.code:", error?.code);
+      console.error("[INDEX DIAGNOSTIC] error.meta:", error?.meta);
+      console.error("[INDEX DIAGNOSTIC] error.cause:", error?.cause);
+      console.error("[INDEX DIAGNOSTIC] documentId:", documentId);
+      console.error("[INDEX DIAGNOSTIC] chunks count:", embeddedChunks.length);
+      console.error("[INDEX DIAGNOSTIC] current chunkIndex:", chunkIndex);
+      console.error("[INDEX DIAGNOSTIC] vector dimension:", embeddedChunks[chunkIndex]?.vector?.length);
+      console.error("[INDEX DIAGNOSTIC] operation:", 'INSERT INTO "DocumentChunk"');
       throw { code: "VECTOR_INDEXING_FAILURE", message: "We couldn't index this document. Please try again." };
     }
 
