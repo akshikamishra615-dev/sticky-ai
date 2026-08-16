@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     if (contentLength && parseInt(contentLength, 10) > 25 * 1024 * 1024) {
       return NextResponse.json({ success: false, error: { code: "PAYLOAD_TOO_LARGE", message: "Request payload too large." } }, { status: 413 });
     }
-    
+
     if (!userId) {
       return NextResponse.json({ success: false, error: { code: "UNAUTHORIZED", message: "You must be logged in to upload documents." } }, { status: 401 });
     }
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
       console.log("[KB Upload] validation: FAIL - no file");
       return NextResponse.json({ success: false, error: { code: "EMPTY_FILE", message: "No file was uploaded." } }, { status: 400 });
     }
-    
+
     if (file.size === 0) {
       console.log("[KB Upload] validation: FAIL - empty file");
       return NextResponse.json({ success: false, error: { code: "EMPTY_FILE", message: "This file appears to be empty." } }, { status: 400 });
@@ -56,16 +56,16 @@ export async function POST(req: NextRequest) {
 
     const originalName = file.name;
     const ext = originalName.split('.').pop()?.toLowerCase() || "";
-    
+
     console.log("[KB Upload] received:", {
       filename: originalName,
       size: file.size,
       mime: file.type,
       extension: ext
     });
-    
+
     const format = SUPPORTED_FORMATS.find(f => f.ext === ext);
-    
+
     if (!format) {
       console.log("[KB Upload] validation: FAIL - unsupported extension", ext);
       return NextResponse.json({ success: false, error: { code: "INVALID_FILE_TYPE", message: "Unsupported file type." } }, { status: 400 });
@@ -81,20 +81,39 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: { code: "FILE_TOO_LARGE", message: `File is too large. Maximum allowed size is ${format.limit / (1024 * 1024)} MB.` } }, { status: 400 });
     }
 
-    const safeFilename = `${userId}-${crypto.randomUUID()}.${ext}`;
-    const filePath = path.join(UPLOAD_DIR, safeFilename);
-
     const startUpload = performance.now();
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    
+
+    // Generate SHA-256 hash of the file content for deduplication
+    const fileHash = crypto.createHash("sha256").update(buffer).digest("hex");
+    const safeFilename = `${userId}-${fileHash}.${ext}`;
+    const fileUrl = `/api/documents/${safeFilename}`;
+    const filePath = path.join(UPLOAD_DIR, safeFilename);
+
+    // Duplicate check: Prevent uploading the same exact file if it's already processing or ready
+    const existingDoc = await prisma.document.findFirst({
+      where: {
+        userId,
+        url: fileUrl,
+        status: {
+          not: "FAILED"
+        }
+      }
+    });
+
+    if (existingDoc) {
+      console.log(`[KB Upload] duplicate file detected: ${safeFilename}`);
+      return NextResponse.json({ success: false, error: { code: "DUPLICATE_FILE", message: "This exact document has already been uploaded." } }, { status: 400 });
+    }
+
     if (ext === 'pdf') {
       if (buffer.length < 4 || buffer.toString('utf8', 0, 4) !== '%PDF') {
         console.log("[KB Upload] validation: FAIL - invalid PDF signature");
         return NextResponse.json({ success: false, error: { code: "INVALID_FILE_TYPE", message: "Invalid PDF signature." } }, { status: 400 });
       }
     }
-    
+
     // Use async file writing to prevent blocking the Node.js event loop
     await fsPromises.writeFile(filePath, buffer);
 
@@ -108,7 +127,7 @@ export async function POST(req: NextRequest) {
         size: file.size,
         status: "PROCESSING_DOCUMENT",
         sourceType: format.type,
-        url: `/api/documents/${safeFilename}`
+        url: fileUrl
       }
     });
 

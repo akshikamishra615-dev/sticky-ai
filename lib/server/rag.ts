@@ -218,6 +218,16 @@ async function processDocument(documentId: string, filePath: string, userId: str
     console.log(`[KB PERF] document READY`);
     console.log(`[KB] Total processing time: ${Math.round(performance.now() - startProcessing)}ms`);
 
+    // Clean up temporary file ONLY on success
+    try {
+      if (fs.existsSync(filePath)) {
+        await fs.promises.unlink(filePath);
+        console.log(`[KB DEBUG] Cleaned up temporary file: ${filePath}`);
+      }
+    } catch (cleanupError) {
+      console.error("[KB ERROR] Failed to clean up temporary file:", cleanupError);
+    }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     console.error("[KB ERROR] stage: ProcessDocument Catch");
@@ -238,15 +248,6 @@ async function processDocument(documentId: string, filePath: string, userId: str
       });
     } catch (e) {
       console.error("[KB ERROR] Fallback update failed:", e);
-    }
-  } finally {
-    try {
-      if (fs.existsSync(filePath)) {
-        await fs.promises.unlink(filePath);
-        console.log(`[KB DEBUG] Cleaned up temporary file: ${filePath}`);
-      }
-    } catch (cleanupError) {
-      console.error("[KB ERROR] Failed to clean up temporary file:", cleanupError);
     }
   }
 }
@@ -342,6 +343,7 @@ export async function searchKnowledgeBase(query: string, userId: string) {
   const vectorString = `[${queryEmbedding.join(',')}]`;
 
   // 1. Primary Vector Retrieval (Top 8)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const primaryResults = await prisma.$queryRaw<any[]>`
     SELECT 
       c.id, 
@@ -362,6 +364,7 @@ export async function searchKnowledgeBase(query: string, userId: string) {
 
   if (primaryResults.length === 0) return [];
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const finalChunks = new Map<string, any>();
   const docBestDistance = new Map<string, number>();
 
