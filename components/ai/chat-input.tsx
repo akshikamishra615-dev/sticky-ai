@@ -5,13 +5,16 @@ import { Paperclip, Mic, Send, X, Loader2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface ChatInputProps {
-  onSend: (message: string, useRAG: boolean, language: string) => void;
+  onSend: (message: string, useRAG: boolean, language: string, documentIds?: string[]) => void;
   disabled?: boolean;
+  documents?: { id: string; name: string }[];
 }
 
-export function ChatInput({ onSend, disabled }: ChatInputProps) {
+export function ChatInput({ onSend, disabled, documents }: ChatInputProps) {
   const [input, setInput] = React.useState("");
   const [useRAG, setUseRAG] = React.useState(false);
+  const [selectedDocs, setSelectedDocs] = React.useState<string[]>([]);
+  const [showDocSelector, setShowDocSelector] = React.useState(false);
   const [language, setLanguage] = React.useState("Auto Detect");
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
@@ -72,7 +75,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         setSelectedFile(null);
       }
 
-      onSend(finalMessage, useRAG, language);
+      onSend(finalMessage, useRAG, language, useRAG && selectedDocs.length > 0 ? selectedDocs : undefined);
       setInput("");
       if (textareaRef.current) {
         textareaRef.current.style.height = "auto";
@@ -175,17 +178,65 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
         <div className="px-3 pt-2 pb-1 flex items-center justify-between border-b border-[var(--border)]/30 mb-2">
            <div className="flex flex-wrap items-center gap-2">
              <button 
-               onClick={() => setUseRAG(false)} 
+               onClick={() => { setUseRAG(false); setShowDocSelector(false); }} 
                className={`text-xs font-medium px-2 py-1 rounded-md transition-colors ${!useRAG ? 'bg-[var(--elevated)] text-[var(--primary-text)]' : 'text-[var(--muted-text)] hover:text-[var(--secondary-text)]'}`}
              >
                General AI
              </button>
-             <button 
-               onClick={() => setUseRAG(true)}
-               className={`text-xs font-medium px-2 py-1 rounded-md transition-colors ${useRAG ? 'bg-[var(--ai-accent)]/10 text-[var(--ai-accent)]' : 'text-[var(--muted-text)] hover:text-[var(--secondary-text)]'}`}
-             >
-               My Knowledge Base
-             </button>
+             <div className="relative">
+               <button 
+                 onClick={() => {
+                   if (!useRAG) {
+                     setUseRAG(true);
+                     setSelectedDocs([]);
+                   } else {
+                     setShowDocSelector(!showDocSelector);
+                   }
+                 }}
+                 className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-md transition-colors ${useRAG ? 'bg-[var(--ai-accent)]/10 text-[var(--ai-accent)]' : 'text-[var(--muted-text)] hover:text-[var(--secondary-text)]'}`}
+               >
+                 {selectedDocs.length > 0 ? `${selectedDocs.length} Document${selectedDocs.length > 1 ? 's' : ''}` : 'My Knowledge Base'}
+                 {useRAG && <span className="ml-1 text-[10px]">▼</span>}
+               </button>
+               
+               {showDocSelector && useRAG && (
+                 <>
+                   <div className="fixed inset-0 z-40" onClick={() => setShowDocSelector(false)} />
+                   <div className="absolute left-0 top-full mt-1 w-64 max-h-60 overflow-y-auto bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-lg z-50 p-2 flex flex-col gap-1">
+                     <div 
+                       className={`flex items-center px-2 py-1.5 rounded cursor-pointer hover:bg-[var(--elevated)] ${selectedDocs.length === 0 ? 'bg-[var(--ai-accent)]/10 text-[var(--ai-accent)] font-medium' : 'text-[var(--primary-text)]'}`}
+                       onClick={() => setSelectedDocs([])}
+                     >
+                       All Documents
+                     </div>
+                     {documents?.map(doc => (
+                       <div 
+                         key={doc.id}
+                         className="flex items-center px-2 py-1.5 rounded cursor-pointer hover:bg-[var(--elevated)]"
+                         onClick={() => {
+                           setSelectedDocs(prev => 
+                             prev.includes(doc.id) 
+                               ? prev.filter(id => id !== doc.id)
+                               : [...prev, doc.id]
+                           );
+                         }}
+                       >
+                         <input 
+                           type="checkbox" 
+                           checked={selectedDocs.includes(doc.id)} 
+                           onChange={() => {}}
+                           className="mr-2 rounded border-[var(--border)] text-[var(--ai-accent)] focus:ring-[var(--ai-accent)] pointer-events-none"
+                         />
+                         <span className="text-sm truncate text-[var(--primary-text)]">{doc.name}</span>
+                       </div>
+                     ))}
+                     {(!documents || documents.length === 0) && (
+                       <div className="px-2 py-1.5 text-xs text-[var(--muted-text)] italic">No documents available.</div>
+                     )}
+                   </div>
+                 </>
+               )}
+             </div>
            </div>
             
             <div className="flex items-center space-x-1 ml-auto shrink-0">

@@ -13,12 +13,18 @@ interface ChatMessageProps {
   onRegenerate?: (id: string) => void;
   userName?: string;
   userImage?: string;
+  documents?: { id: string; name: string }[];
 }
 
-export function ChatMessage({ message, onRegenerate, userName = "User", userImage }: ChatMessageProps) {
+export function ChatMessage({ message, onRegenerate, userName = "User", userImage, documents }: ChatMessageProps) {
   const isAi = message.role === "ai";
   const [copied, setCopied] = React.useState(false);
   const [feedback, setFeedback] = React.useState<"up" | "down" | null>(null);
+
+  // Pre-process citations: [[docId, page]] -> [page](citation://docId/page)
+  const processedContent = isAi 
+    ? message.content.replace(/\[\[([a-zA-Z0-9-]+),\s*([^\]]+)\]\]/g, '[$2](citation://$1/$2)')
+    : message.content;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content);
@@ -82,8 +88,17 @@ export function ChatMessage({ message, onRegenerate, userName = "User", userImag
                 ol({children}: any) {
                   return <ol className="list-decimal pl-5 mb-4 space-y-1">{children}</ol>;
                 },
-                a({children, href}: any) {
-                  return <a href={href} className="text-[var(--ai-accent)] hover:underline">{children}</a>;
+                a({children, href, ...props}: any) {
+                  if (href?.startsWith('citation://')) {
+                    const [, docId, page] = href.replace('citation://', '').split('/');
+                    const docName = documents?.find(d => d.id === docId)?.name || "Document";
+                    return (
+                      <span className="inline-flex items-center gap-1 mx-1 px-1.5 py-0.5 rounded bg-[var(--ai-accent)]/10 border border-[var(--ai-accent)]/20 text-[var(--ai-accent)] text-[10px] font-semibold cursor-help" title={`${docName} (Page ${page})`}>
+                        Pg {page}
+                      </span>
+                    );
+                  }
+                  return <a href={href} className="text-[var(--ai-accent)] hover:underline" {...props}>{children}</a>;
                 },
                 h1({children}: any) {
                   return <h1 className="text-xl font-bold mt-6 mb-4">{children}</h1>;
@@ -96,7 +111,7 @@ export function ChatMessage({ message, onRegenerate, userName = "User", userImag
                 }
               }}
             >
-              {message.content}
+              {processedContent}
             </ReactMarkdown>
           </div>
 

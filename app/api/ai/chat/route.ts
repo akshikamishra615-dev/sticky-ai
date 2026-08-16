@@ -170,7 +170,7 @@ Rewritten Query:`;
             avgDistance = primaryChunks.reduce((acc, c) => acc + (c.distance as number), 0) / primaryChunks.length;
           }
 
-          ragContext = chunks.map(c => `[Document: ${c.documentName || 'Unknown'} | Page: ${c.metadata?.pageNumber || 'N/A'}]\\n${c.content}`).join('\\n\\n');
+          ragContext = chunks.map(c => `[Source ID: ${c.documentId} | Name: ${c.documentName || 'Unknown'} | Page: ${c.metadata?.pageNumber || 'N/A'}]\n${c.content}`).join('\n\n');
         } else {
           ragContext = "[SYSTEM_NOTIFICATION: No relevant information was found in the user's Knowledge Base for this query.]";
         }

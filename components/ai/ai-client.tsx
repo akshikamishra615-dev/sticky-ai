@@ -16,6 +16,7 @@ const generateId = (prefix: string) => `${prefix}-${Date.now()}-${idCounter++}`;
 
 interface AiClientProps {
   initialConversations: Conversation[];
+  initialDocuments?: { id: string; name: string }[];
   userName: string;
   userImage?: string;
 }
@@ -79,7 +80,7 @@ function useSelectionAutoScroll() {
   }, []);
 }
 
-export function AiClient({ initialConversations, userName, userImage }: AiClientProps) {
+export function AiClient({ initialConversations, initialDocuments, userName, userImage }: AiClientProps) {
   useSelectionAutoScroll();
   const [conversations, setConversations] = React.useState<Conversation[]>(initialConversations);
   // Default to first conversation if it exists
@@ -104,7 +105,7 @@ export function AiClient({ initialConversations, userName, userImage }: AiClient
   }, [activeConversation?.messages, isGenerating]);
 
 
-  const handleSend = async (content: string, useRAG: boolean = false, language: string = "Auto Detect") => {
+  const handleSend = async (content: string, useRAG: boolean = false, language: string = "Auto Detect", documentIds?: string[]) => {
     if (!content.trim() || isGenerating) return;
 
     let currentConversationId = activeId;
@@ -174,7 +175,8 @@ export function AiClient({ initialConversations, userName, userImage }: AiClient
             content: m.content
           })),
           useRAG,
-          language
+          language,
+          documentIds
         })
       });
 
@@ -448,6 +450,7 @@ export function AiClient({ initialConversations, userName, userImage }: AiClient
                   onRegenerate={msg.role === "ai" ? handleRegenerate : undefined} 
                   userName={userName}
                   userImage={userImage}
+                  documents={initialDocuments}
                 />
               ))}
               {isGenerating && <TypingIndicator />}
@@ -480,7 +483,7 @@ export function AiClient({ initialConversations, userName, userImage }: AiClient
         {/* Input Area */}
         <div className="sticky bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-[var(--background)] 80% via-[var(--background)] to-transparent pt-10 pb-6 px-4">
           <div className="max-w-4xl mx-auto w-full">
-            <ChatInput onSend={handleSend} disabled={isGenerating} />
+            <ChatInput onSend={handleSend} disabled={isGenerating} documents={initialDocuments} />
           </div>
         </div>
       </div>
