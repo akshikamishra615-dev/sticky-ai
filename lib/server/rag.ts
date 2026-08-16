@@ -341,11 +341,15 @@ export async function searchKnowledgeBase(query: string, userId: string) {
   const queryEmbedding = Array.from(output.data);
   const vectorString = `[${queryEmbedding.join(',')}]`;
 
-  const results = await prisma.$queryRaw`
+  // 1. Primary Vector Retrieval (Top 8)
+  const primaryResults = await prisma.$queryRaw<any[]>`
     SELECT 
       c.id, 
       c.content, 
       c.metadata,
+      c."documentId",
+      c."chunkIndex",
+      (c.embedding <=> ${vectorString}::vector) as distance,
       d.name as "documentName"
     FROM "DocumentChunk" c
     JOIN "Document" d ON c."documentId" = d.id
@@ -353,9 +357,74 @@ export async function searchKnowledgeBase(query: string, userId: string) {
       AND d.status = 'READY'
       AND c.embedding <=> ${vectorString}::vector < ${COSINE_DISTANCE_THRESHOLD}
     ORDER BY c.embedding <=> ${vectorString}::vector ASC
-    LIMIT 4;
+    LIMIT 8;
   `;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return results as { id: string; content: string; metadata: any; documentName: string }[];
+  if (primaryResults.length === 0) return [];
+
+  const finalChunks = new Map<string, any>();
+  const docBestDistance = new Map<string, number>();
+
+  // Add primary results and track best distance per document
+  for (const row of primaryResults) {
+    const key = `${row.documentId}-${row.chunkIndex}`;
+    finalChunks.set(key, row);
+    
+    if (!docBestDistance.has(row.documentId) || row.distance < docBestDistance.get(row.documentId)!) {
+      docBestDistance.set(row.documentId, row.distance);
+    }
+  }
+
+  // 2. Neighboring Chunk Expansion
+  // Conservative rule: only expand if primary match is very strong (< 0.45)
+  // Hard maximum context size: 15 chunks (~15,000 chars / ~3,500 tokens)
+  const MAX_FINAL_CHUNKS = 15;
+
+  for (const row of primaryResults) {
+    if (finalChunks.size >= MAX_FINAL_CHUNKS) break;
+    
+    if (row.distance < 0.45) {
+      const neighbors = await prisma.documentChunk.findMany({
+        where: {
+          documentId: row.documentId,
+          chunkIndex: { in: [row.chunkIndex - 1, row.chunkIndex + 1] },
+        },
+        include: { document: { select: { name: true } } }
+      });
+
+      for (const n of neighbors) {
+        if (finalChunks.size >= MAX_FINAL_CHUNKS) break;
+        
+        const key = `${n.documentId}-${n.chunkIndex}`;
+        if (!finalChunks.has(key)) {
+          finalChunks.set(key, {
+            id: n.id,
+            content: n.content,
+            metadata: n.metadata,
+            documentId: n.documentId,
+            chunkIndex: n.chunkIndex,
+            documentName: n.document.name,
+          });
+        }
+      }
+    }
+  }
+
+  // 3. Sort for LLM
+  // Group by Document's best primary distance, then sort sequentially by chunkIndex
+  // This ensures the LLM reads continuous adjacent paragraphs naturally without jumping around.
+  const resultsArray = Array.from(finalChunks.values());
+  resultsArray.sort((a, b) => {
+    if (a.documentId !== b.documentId) {
+      return (docBestDistance.get(a.documentId) || 1) - (docBestDistance.get(b.documentId) || 1);
+    }
+    return a.chunkIndex - b.chunkIndex;
+  });
+
+  return resultsArray.map(r => ({
+    id: r.id,
+    content: r.content,
+    metadata: r.metadata,
+    documentName: r.documentName
+  }));
 }
