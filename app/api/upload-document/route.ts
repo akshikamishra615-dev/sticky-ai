@@ -18,12 +18,7 @@ import { SUPPORTED_FORMATS } from "@/lib/shared/file-validation";
 export async function POST(req: NextRequest) {
   try {
     const session = await auth();
-    let userId = session?.user?.id;
-    
-    // Fallback for local testing
-    if (!userId && process.env.NODE_ENV === 'development') {
-      userId = "cmskafizo0000l1boh9jfy8wi";
-    }
+    const userId = session?.user?.id;
 
     const ip = getIp(req);
     const rateLimitKey = getRateLimitKey(ip, userId);
@@ -76,6 +71,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: { code: "INVALID_FILE_TYPE", message: "Unsupported file type." } }, { status: 400 });
     }
 
+    if (file.type && file.type !== format.mime) {
+      console.log("[KB Upload] validation: FAIL - MIME type mismatch");
+      return NextResponse.json({ success: false, error: { code: "INVALID_FILE_TYPE", message: "MIME type mismatch." } }, { status: 400 });
+    }
+
     if (file.size > format.limit) {
       console.log("[KB Upload] validation: FAIL - file too large");
       return NextResponse.json({ success: false, error: { code: "FILE_TOO_LARGE", message: `File is too large. Maximum allowed size is ${format.limit / (1024 * 1024)} MB.` } }, { status: 400 });
@@ -87,6 +87,13 @@ export async function POST(req: NextRequest) {
     const startUpload = performance.now();
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
+    
+    if (ext === 'pdf') {
+      if (buffer.length < 4 || buffer.toString('utf8', 0, 4) !== '%PDF') {
+        console.log("[KB Upload] validation: FAIL - invalid PDF signature");
+        return NextResponse.json({ success: false, error: { code: "INVALID_FILE_TYPE", message: "Invalid PDF signature." } }, { status: 400 });
+      }
+    }
     
     // Use async file writing to prevent blocking the Node.js event loop
     await fsPromises.writeFile(filePath, buffer);

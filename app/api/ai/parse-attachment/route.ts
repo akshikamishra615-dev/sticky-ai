@@ -6,11 +6,7 @@ import { parseDocumentFile } from "@/lib/server/parsers";
 export async function POST(req: NextRequest) {
   try {
     const session = await auth();
-    let userId = session?.user?.id;
-    
-    if (!userId && process.env.NODE_ENV === 'development') {
-      userId = "cmskafizo0000l1boh9jfy8wi"; // fallback for local dev
-    }
+    const userId = session?.user?.id;
     
     if (!userId) {
       return NextResponse.json({ success: false, error: { code: "UNAUTHORIZED", message: "Unauthorized" } }, { status: 401 });
@@ -30,11 +26,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: { code: "INVALID_FILE_TYPE", message: "Unsupported file type." } }, { status: 400 });
     }
 
+    if (file.type && file.type !== format.mime) {
+      return NextResponse.json({ success: false, error: { code: "INVALID_FILE_TYPE", message: "MIME type mismatch." } }, { status: 400 });
+    }
+
     if (file.size > format.limit) {
       return NextResponse.json({ success: false, error: { code: "FILE_TOO_LARGE", message: `File too large.` } }, { status: 400 });
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
+    
+    if (ext === 'pdf') {
+      if (buffer.length < 4 || buffer.toString('utf8', 0, 4) !== '%PDF') {
+        return NextResponse.json({ success: false, error: { code: "INVALID_FILE_TYPE", message: "Invalid PDF signature." } }, { status: 400 });
+      }
+    }
     
     // Parse the document
     const parsedChunks = await parseDocumentFile(buffer, file.type, file.name);
