@@ -333,6 +333,8 @@ export async function deleteDocument(documentId: string) {
   return true;
 }
 
+const COSINE_DISTANCE_THRESHOLD = 0.7;
+
 export async function searchKnowledgeBase(query: string, userId: string) {
   const extractor = await getExtractor();
   const output = await extractor(query, { pooling: 'mean', normalize: true });
@@ -348,7 +350,9 @@ export async function searchKnowledgeBase(query: string, userId: string) {
     FROM "DocumentChunk" c
     JOIN "Document" d ON c."documentId" = d.id
     WHERE c."userId" = ${userId}
-    ORDER BY c.embedding <=> ${vectorString}::vector
+      AND d.status = 'READY'
+      AND c.embedding <=> ${vectorString}::vector < ${COSINE_DISTANCE_THRESHOLD}
+    ORDER BY c.embedding <=> ${vectorString}::vector ASC
     LIMIT 4;
   `;
 

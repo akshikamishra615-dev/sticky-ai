@@ -80,10 +80,13 @@ export async function POST(req: Request) {
         const chunks = await searchKnowledgeBase(latestMessage.content, userId);
         
         if (chunks && chunks.length > 0) {
-          ragContext = chunks.map(c => `[From Document: ${c.metadata?.documentName || 'Unknown'}]\n${c.content}`).join('\n\n');
+          ragContext = chunks.map(c => `[Document: ${c.metadata?.documentName || 'Unknown'} | Page: ${c.metadata?.pageNumber || 'N/A'}]\n${c.content}`).join('\n\n');
+        } else {
+          ragContext = "[SYSTEM_NOTIFICATION: No relevant information was found in the user's Knowledge Base for this query.]";
         }
       } catch (e) {
         console.error("[AI Chat Route] RAG search failed:", e);
+        ragContext = "[SYSTEM_NOTIFICATION: The Knowledge Base retrieval encountered a technical error.]";
       }
     }
 
