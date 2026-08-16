@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/auth";
 import fs from "fs";
 import path from "path";
@@ -64,13 +65,13 @@ export async function queueProcessDocument(documentId: string, filePath: string,
 async function processDocument(documentId: string, filePath: string, userId: string) {
   const startProcessing = performance.now();
   console.log(`[KB PERF] processing started`);
-  
+
   try {
     console.log(`[KB DEBUG] file exists: ${fs.existsSync(filePath)}`);
     if (!fs.existsSync(filePath)) {
       throw { code: "MISSING_FILE", message: "The uploaded file could not be found on the server." };
     }
-    
+
     const stats = fs.statSync(filePath);
     console.log(`[KB DEBUG] file size: ${stats.size}`);
 
@@ -81,33 +82,33 @@ async function processDocument(documentId: string, filePath: string, userId: str
       where: { id: documentId },
       data: { status: "PROCESSING_DOCUMENT" }
     });
-    
+
     // 1. Read file buffer
     const buffer = fs.readFileSync(filePath);
-    
+
     const filename = filePath.split(/[/\\]/).pop() || "";
-    
+
     // 2. Extract text & metadata using central parser
     console.log(`[KB PERF] parser started`);
     console.log(`[MEMORY] RSS before parsing: ${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB`);
     const parserStart = performance.now();
-    
+
     const onOcrScanning = async () => {
       await prisma.document.update({
         where: { id: documentId },
         data: { status: "OCR_SCANNING" } // Temporarily show OCR scanning
       });
     };
-    
+
     const parsedChunks = await parseDocumentFile(buffer, doc.mimeType, filename, onOcrScanning);
     console.log(`[MEMORY] RSS after parsing: ${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB`);
     console.log(`[KB PERF] parser finished: ${Math.round(performance.now() - parserStart)} ms`);
-    
+
     // 3. Chunk text (respecting parser chunks)
     const chunkingStart = performance.now();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const finalChunks: { text: string; metadata: any }[] = [];
-    
+
     for (const pc of parsedChunks) {
       const split = chunkText(pc.text, 1000, 200);
       for (const textChunk of split) {
@@ -118,7 +119,7 @@ async function processDocument(documentId: string, filePath: string, userId: str
       }
     }
     console.log(`[KB PERF] chunking finished: ${Math.round(performance.now() - chunkingStart)} ms`);
-    
+
     const totalExtractedLength = finalChunks.reduce((acc, c) => acc + c.text.length, 0);
     console.log(`[KB PERF] extracted text length: ${totalExtractedLength}`);
     console.log(`[KB PERF] chunk count: ${finalChunks.length}`);
@@ -137,19 +138,19 @@ async function processDocument(documentId: string, filePath: string, userId: str
       where: { id: documentId },
       data: { status: "GENERATING_EMBEDDINGS" }
     });
-    
+
     // Batch inference settings
     const batchSize = 16;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const embeddedChunks: { documentId: string, content: string, metadata: any, vector: number[] }[] = [];
-    
+
     try {
       for (let i = 0; i < finalChunks.length; i += batchSize) {
         const batch = finalChunks.slice(i, i + batchSize);
         const batchTexts = batch.map(b => b.text);
         const output = await extractor(batchTexts, { pooling: 'mean', normalize: true });
         const batchEmbeddings = output.tolist();
-        
+
         for (let j = 0; j < batch.length; j++) {
           embeddedChunks.push({
             documentId,
@@ -167,7 +168,7 @@ async function processDocument(documentId: string, filePath: string, userId: str
       console.error("[KB ERROR] stack:", e?.stack);
       throw { code: "EMBEDDING_FAILURE", message: "We couldn't generate the AI embeddings. Please try again." };
     }
-    
+
     console.log(`[MEMORY] RSS after embedding: ${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB`);
     console.log(`[KB PERF] embedding finished: ${Math.round(performance.now() - embeddingStart)} ms`);
 
@@ -178,7 +179,7 @@ async function processDocument(documentId: string, filePath: string, userId: str
       where: { id: documentId },
       data: { status: "INDEXING" }
     });
-    
+
     try {
       // 5. Index into pgvector
       let chunkIndex = 0;
@@ -187,12 +188,12 @@ async function processDocument(documentId: string, filePath: string, userId: str
         await prisma.$executeRaw`
           INSERT INTO "DocumentChunk" ("id", "documentId", "userId", "content", "metadata", "embedding", "createdAt", "chunkIndex")
           VALUES (
-            gen_random_uuid(), 
-            ${chunk.documentId}, 
+            gen_random_uuid(),
+            ${chunk.documentId},
             ${userId},
-            ${chunk.content}, 
-            ${chunk.metadata ? JSON.stringify(chunk.metadata) : null}::jsonb, 
-            ${vectorString}::vector, 
+            ${chunk.content},
+            ${chunk.metadata ? JSON.stringify(chunk.metadata) : null}::jsonb,
+            ${vectorString}::vector,
             NOW(),
             ${chunkIndex}
           )
@@ -234,14 +235,14 @@ async function processDocument(documentId: string, filePath: string, userId: str
     console.error("[KB ERROR] name:", error?.name || error?.code);
     console.error("[KB ERROR] message:", error?.message);
     console.error("[KB ERROR] stack:", error?.stack);
-    
+
     const errorCode = error?.code || "UNKNOWN_PROCESSING_ERROR";
     const errorMessage = error?.message || "We couldn't process this document. Please try again.";
-    
+
     try {
       // Cleanup partial chunks on failure
       await prisma.$executeRaw`DELETE FROM "DocumentChunk" WHERE "documentId" = ${documentId} AND "userId" = ${userId}`;
-      
+
       await prisma.document.update({
         where: { id: documentId },
         data: { status: "FAILED", errorCode, errorMessage }
@@ -258,7 +259,7 @@ function chunkText(text: string, maxChunkSize = 1000, overlap = 200) {
   while (i < text.length) {
     let end = Math.min(i + maxChunkSize, text.length);
     let chunk = text.slice(i, end);
-    
+
     if (end < text.length) {
       const lastPeriod = chunk.lastIndexOf('.');
       const lastNewline = chunk.lastIndexOf('\n');
@@ -268,12 +269,12 @@ function chunkText(text: string, maxChunkSize = 1000, overlap = 200) {
         chunk = text.slice(i, end);
       }
     }
-    
+
     const cleanChunk = chunk.trim();
     if (cleanChunk.length >= 10) {
       chunks.push(cleanChunk);
     }
-    
+
     i = end - overlap;
     if (i <= 0 || end === text.length) break;
   }
@@ -336,7 +337,7 @@ export async function deleteDocument(documentId: string) {
 
 const COSINE_DISTANCE_THRESHOLD = 0.7;
 
-export async function searchKnowledgeBase(query: string, userId: string) {
+export async function searchKnowledgeBase(query: string, userId: string, documentIds?: string[]) {
   const extractor = await getExtractor();
   const output = await extractor(query, { pooling: 'mean', normalize: true });
   const queryEmbedding = Array.from(output.data);
@@ -344,23 +345,50 @@ export async function searchKnowledgeBase(query: string, userId: string) {
 
   // 1. Primary Vector Retrieval (Top 8)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const primaryResults = await prisma.$queryRaw<any[]>`
-    SELECT 
-      c.id, 
-      c.content, 
-      c.metadata,
-      c."documentId",
-      c."chunkIndex",
-      (c.embedding <=> ${vectorString}::vector) as distance,
-      d.name as "documentName"
-    FROM "DocumentChunk" c
-    JOIN "Document" d ON c."documentId" = d.id
-    WHERE c."userId" = ${userId}
-      AND d.status = 'READY'
-      AND c.embedding <=> ${vectorString}::vector < ${COSINE_DISTANCE_THRESHOLD}
-    ORDER BY c.embedding <=> ${vectorString}::vector ASC
-    LIMIT 8;
-  `;
+  let primaryResults: any[];
+
+  if (documentIds !== undefined) {
+    if (documentIds.length === 0) return [];
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    primaryResults = await prisma.$queryRaw<any[]>`
+      SELECT
+        c.id,
+        c.content,
+        c.metadata,
+        c."documentId",
+        c."chunkIndex",
+        (c.embedding <=> ${vectorString}::vector) as distance,
+        d.name as "documentName"
+      FROM "DocumentChunk" c
+      JOIN "Document" d ON c."documentId" = d.id
+      WHERE c."userId" = ${userId}
+        AND d.status = 'READY'
+        AND d.id IN (${Prisma.join(documentIds)})
+        AND c.embedding <=> ${vectorString}::vector < ${COSINE_DISTANCE_THRESHOLD}
+      ORDER BY c.embedding <=> ${vectorString}::vector ASC
+      LIMIT 8;
+    `;
+  } else {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    primaryResults = await prisma.$queryRaw<any[]>`
+      SELECT
+        c.id,
+        c.content,
+        c.metadata,
+        c."documentId",
+        c."chunkIndex",
+        (c.embedding <=> ${vectorString}::vector) as distance,
+        d.name as "documentName"
+      FROM "DocumentChunk" c
+      JOIN "Document" d ON c."documentId" = d.id
+      WHERE c."userId" = ${userId}
+        AND d.status = 'READY'
+        AND c.embedding <=> ${vectorString}::vector < ${COSINE_DISTANCE_THRESHOLD}
+      ORDER BY c.embedding <=> ${vectorString}::vector ASC
+      LIMIT 8;
+    `;
+  }
 
   if (primaryResults.length === 0) return [];
 
@@ -372,7 +400,7 @@ export async function searchKnowledgeBase(query: string, userId: string) {
   for (const row of primaryResults) {
     const key = `${row.documentId}-${row.chunkIndex}`;
     finalChunks.set(key, row);
-    
+
     if (!docBestDistance.has(row.documentId) || row.distance < docBestDistance.get(row.documentId)!) {
       docBestDistance.set(row.documentId, row.distance);
     }
@@ -385,7 +413,7 @@ export async function searchKnowledgeBase(query: string, userId: string) {
 
   for (const row of primaryResults) {
     if (finalChunks.size >= MAX_FINAL_CHUNKS) break;
-    
+
     if (row.distance < 0.45) {
       const neighbors = await prisma.documentChunk.findMany({
         where: {
@@ -397,7 +425,7 @@ export async function searchKnowledgeBase(query: string, userId: string) {
 
       for (const n of neighbors) {
         if (finalChunks.size >= MAX_FINAL_CHUNKS) break;
-        
+
         const key = `${n.documentId}-${n.chunkIndex}`;
         if (!finalChunks.has(key)) {
           finalChunks.set(key, {
@@ -406,7 +434,7 @@ export async function searchKnowledgeBase(query: string, userId: string) {
             metadata: n.metadata,
             documentId: n.documentId,
             chunkIndex: n.chunkIndex,
-            documentName: n.document.name,
+            documentName: n.document.name
           });
         }
       }
@@ -428,6 +456,8 @@ export async function searchKnowledgeBase(query: string, userId: string) {
     id: r.id,
     content: r.content,
     metadata: r.metadata,
-    documentName: r.documentName
+    documentId: r.documentId,
+    documentName: r.documentName,
+    distance: r.distance
   }));
 }
