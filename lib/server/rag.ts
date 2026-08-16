@@ -89,6 +89,7 @@ async function processDocument(documentId: string, filePath: string, userId: str
     
     // 2. Extract text & metadata using central parser
     console.log(`[KB PERF] parser started`);
+    console.log(`[MEMORY] RSS before parsing: ${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB`);
     const parserStart = performance.now();
     
     const onOcrScanning = async () => {
@@ -99,6 +100,7 @@ async function processDocument(documentId: string, filePath: string, userId: str
     };
     
     const parsedChunks = await parseDocumentFile(buffer, doc.mimeType, filename, onOcrScanning);
+    console.log(`[MEMORY] RSS after parsing: ${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB`);
     console.log(`[KB PERF] parser finished: ${Math.round(performance.now() - parserStart)} ms`);
     
     // 3. Chunk text (respecting parser chunks)
@@ -128,6 +130,7 @@ async function processDocument(documentId: string, filePath: string, userId: str
     const extractor = await getExtractor();
 
     console.log(`[KB PERF] embedding started`);
+    console.log(`[MEMORY] RSS before embedding: ${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB`);
     const embeddingStart = performance.now();
 
     await prisma.document.update({
@@ -165,6 +168,7 @@ async function processDocument(documentId: string, filePath: string, userId: str
       throw { code: "EMBEDDING_FAILURE", message: "We couldn't generate the AI embeddings. Please try again." };
     }
     
+    console.log(`[MEMORY] RSS after embedding: ${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB`);
     console.log(`[KB PERF] embedding finished: ${Math.round(performance.now() - embeddingStart)} ms`);
 
     console.log(`[KB PERF] indexing started`);

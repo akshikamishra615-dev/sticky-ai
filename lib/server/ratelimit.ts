@@ -22,18 +22,31 @@ const mockDenyLimiter = {
 const isRedisAvailable = !!redis;
 const isProd = process.env.NODE_ENV === "production";
 
+function withErrorLogging(limiter: any) {
+  return {
+    limit: async (identifier: string) => {
+      try {
+        return await limiter.limit(identifier);
+      } catch (error: any) {
+        console.error("[REDIS ERROR] Rate limiter failed:", error?.message || String(error));
+        return { success: false, limit: 0, remaining: 0, reset: Date.now() };
+      }
+    }
+  };
+}
+
 export const rateLimiters = {
-  auth: isRedisAvailable
+  auth: withErrorLogging(isRedisAvailable
     ? new Ratelimit({ redis: redis as Redis, limiter: Ratelimit.slidingWindow(5, "15 m"), prefix: "@upstash/ratelimit/auth" })
-    : (isProd ? mockDenyLimiter : mockAllowLimiter),
+    : (isProd ? mockDenyLimiter : mockAllowLimiter)),
 
-  ai: isRedisAvailable
+  ai: withErrorLogging(isRedisAvailable
     ? new Ratelimit({ redis: redis as Redis, limiter: Ratelimit.slidingWindow(10, "1 m"), prefix: "@upstash/ratelimit/ai" })
-    : (isProd ? mockDenyLimiter : mockAllowLimiter),
+    : (isProd ? mockDenyLimiter : mockAllowLimiter)),
 
-  upload: isRedisAvailable
+  upload: withErrorLogging(isRedisAvailable
     ? new Ratelimit({ redis: redis as Redis, limiter: Ratelimit.slidingWindow(20, "1 h"), prefix: "@upstash/ratelimit/upload" })
-    : (isProd ? mockDenyLimiter : mockAllowLimiter),
+    : (isProd ? mockDenyLimiter : mockAllowLimiter)),
 };
 
 export function getIp(req: Request) {
