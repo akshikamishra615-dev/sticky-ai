@@ -108,11 +108,63 @@ export async function POST(req: Request) {
     });
 
     let ragContext: string | undefined = undefined;
+    let ragMode: 'semantic' | 'summary' = 'semantic';
     if (useRAG && latestMessage.role === 'user') {
       try {
         let searchQuery = latestMessage.content;
 
-        // 1. Query Rewriting for follow-ups
+        const cleanQ = searchQuery.trim().toLowerCase().replace(/[.!?]+$/, '').trim();
+        const broadPatterns = [
+          /^summarize (this |the )?(document|pdf|file|notes|text)$/,
+          /^give (me )?a summary( of (this |the )?(document|pdf|file|notes|text))?$/,
+          /^summary$/,
+          /^can you summarize (this |the )?(document|pdf|file|notes|text)$/,
+          /^please summarize (this |the )?(document|pdf|file|notes|text)$/
+        ];
+        const isBroadSummarization = broadPatterns.some(p => p.test(cleanQ));
+
+        if (isBroadSummarization) {
+          ragMode = 'summary';
+          const targetDocIds = documentIds;
+
+          if (!targetDocIds || targetDocIds.length === 0) {
+            ragContext = "[SYSTEM_NOTIFICATION: To summarize a document, please select a specific document from 'My Knowledge Base' using the dropdown.]";
+          } else {
+            const docs = await prisma.document.findMany({
+              where: { userId: userId, status: 'READY', id: { in: targetDocIds } },
+              select: { id: true, name: true }
+            });
+
+            if (docs.length === 0) {
+              ragContext = "[SYSTEM_NOTIFICATION: The selected document(s) could not be found or are not ready.]";
+            } else {
+              const MAX_CHARS = 20000;
+              let totalChars = 0;
+              let summaryContext = "";
+
+              for (const doc of docs) {
+                summaryContext += `\n\n--- DOCUMENT: ${doc.name} (ID: ${doc.id}) ---\n`;
+                const chunks = await prisma.documentChunk.findMany({
+                  where: { userId: userId, documentId: doc.id },
+                  orderBy: { chunkIndex: 'asc' },
+                  select: { content: true }
+                });
+
+                for (const c of chunks) {
+                  if (totalChars + c.content.length > MAX_CHARS) {
+                    summaryContext += `\n[... DOCUMENT TRUNCATED DUE TO SIZE LIMITS ...]`;
+                    break;
+                  }
+                  summaryContext += `${c.content}\n\n`;
+                  totalChars += c.content.length;
+                }
+                if (totalChars > MAX_CHARS) break;
+              }
+              ragContext = summaryContext;
+            }
+          }
+        } else {
+          // 1. Query Rewriting for follow-ups
         if (contextMessages.length > 1) {
           const isShort = searchQuery.length < 40;
           const hasPronoun = /\b(it|this|that|he|she|they|them|these|those|which|iska|iski|iske|usko|uska|uski|uske|ye|wo)\b/i.test(searchQuery);
@@ -185,6 +237,7 @@ Rewritten Query:`;
           documentCount
         }));
 
+        }
       } catch (e) {
         console.error("[AI Chat Route] RAG search failed:", e);
         ragContext = "[SYSTEM_NOTIFICATION: The Knowledge Base retrieval encountered a technical error.]";
@@ -195,6 +248,7 @@ Rewritten Query:`;
 
     const result = await createChatStream(contextMessages, {
       ragContext,
+      ragMode,
       language,
       userProfileMetadata: profile?.educationMetadata as Record<string, string> | undefined,
       onFinish: async ({ text }) => {

@@ -9,7 +9,8 @@
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:rag": "tsx scripts/eval-rag.ts"
   },
   "dependencies": {
     "@ai-sdk/groq": "^4.0.26",
