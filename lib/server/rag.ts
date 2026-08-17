@@ -34,43 +34,88 @@ async function getExtractor() {
   return extractorPromise;
 }
 
-// Global processing queue (concurrency = 1)
-const processingQueue: Array<() => Promise<void>> = [];
+// Global processing queue state (concurrency = 1)
 let isProcessing = false;
 let isShuttingDown = false;
 
 // Graceful shutdown mitigation
-process.on('SIGTERM', () => {
-  console.log("[System] SIGTERM received. Stopping document processing queue.");
-  isShuttingDown = true;
-});
+if (typeof process !== "undefined") {
+  process.on('SIGTERM', () => {
+    console.log("[System] SIGTERM received. Stopping document processing queue.");
+    isShuttingDown = true;
+  });
 
-async function processNext() {
-  if (isShuttingDown) return;
-  if (isProcessing || processingQueue.length === 0) return;
-  isProcessing = true;
-  const task = processingQueue.shift();
-  if (task) {
-    try {
-      await task();
-    } catch (err) {
-      console.error("[KB ERROR] processNext task threw:", err);
-    } finally {
-      isProcessing = false;
-      // Yield to event loop to allow other tasks to breathe before picking up next
-      setTimeout(processNext, 10);
+  // Periodic lightweight polling worker
+  setInterval(() => {
+    if (!isShuttingDown && !isProcessing) {
+      processNext().catch(() => {});
     }
-  }
+  }, 10000);
 }
 
-export async function queueProcessDocument(documentId: string, filePath: string, userId: string) {
+export async function wakeWorker() {
   if (isShuttingDown) {
     throw { code: "SERVER_SHUTTING_DOWN", message: "Server is shutting down, cannot accept new background jobs." };
   }
-  processingQueue.push(() => processDocument(documentId, filePath, userId));
-  setTimeout(() => {
-    processNext().catch(err => console.error("[KB ERROR] unhandled processNext error:", err));
-  }, 0);
+  if (!isProcessing) {
+    setTimeout(() => {
+      processNext().catch(err => console.error("[KB ERROR] unhandled processNext error:", err));
+    }, 0);
+  }
+}
+
+async function processNext() {
+  if (isShuttingDown) return;
+  if (isProcessing) return;
+  
+  isProcessing = true;
+  
+  try {
+    const doc = await prisma.document.findFirst({
+      where: { status: "QUEUED" },
+      orderBy: { createdAt: "asc" }
+    });
+
+    if (doc) {
+      // Atomic lock
+      const locked = await prisma.document.updateMany({
+        where: { id: doc.id, status: "QUEUED" },
+        data: { status: "PROCESSING_DOCUMENT" }
+      });
+
+      if (locked.count === 1) {
+        if (!doc.url) {
+          throw new Error("Document URL is missing.");
+        }
+        
+        const filename = doc.url.split('/').pop();
+        const filePath = filename ? path.join(UPLOAD_DIR, filename) : "";
+        
+        if (!filePath || !fs.existsSync(filePath)) {
+           await prisma.document.update({
+             where: { id: doc.id },
+             data: { status: "FAILED", errorCode: "MISSING_FILE", errorMessage: "File lost during server restart, please re-upload." }
+           });
+        } else {
+           await processDocument(doc.id, filePath, doc.userId);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("[KB ERROR] processNext task threw:", error);
+  } finally {
+    isProcessing = false;
+  }
+  
+  if (!isShuttingDown) {
+    // Check if more jobs exist
+    const hasMore = await prisma.document.findFirst({ where: { status: "QUEUED" }, select: { id: true } });
+    if (hasMore) {
+      setTimeout(() => {
+        processNext().catch(err => console.error("[KB ERROR] unhandled processNext loop error:", err));
+      }, 0);
+    }
+  }
 }
 
 async function processDocument(documentId: string, filePath: string, userId: string) {
@@ -88,11 +133,6 @@ async function processDocument(documentId: string, filePath: string, userId: str
 
     const doc = await prisma.document.findUnique({ where: { id: documentId } });
     if (!doc) throw { code: "MISSING_DOCUMENT", message: "Document record not found in database." };
-
-    await prisma.document.update({
-      where: { id: documentId },
-      data: { status: "PROCESSING_DOCUMENT" }
-    });
 
     // 1. Read file buffer
     const buffer = fs.readFileSync(filePath);

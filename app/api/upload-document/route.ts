@@ -5,7 +5,7 @@ import fsPromises from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
-import { queueProcessDocument } from "@/lib/server/rag";
+import { wakeWorker } from "@/lib/server/rag";
 import { rateLimiters, getIp, getRateLimitKey } from "@/lib/server/ratelimit";
 
 const UPLOAD_DIR = path.join(process.cwd(), ".data/uploads");
@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
         name: originalName,
         mimeType: file.type,
         size: file.size,
-        status: "PROCESSING_DOCUMENT",
+        status: "QUEUED",
         sourceType: format.type,
         url: fileUrl
       }
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
 
     // Process asynchronously through the global queue
     try {
-      await queueProcessDocument(document.id, filePath, userId);
+      wakeWorker();
     } catch (err: unknown) {
       const errorObj = err as { code?: string };
       if (errorObj?.code === "SERVER_SHUTTING_DOWN") {

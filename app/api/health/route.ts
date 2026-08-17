@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { wakeWorker } from "@/lib/server/rag";
 import { Redis } from "@upstash/redis";
 
 export async function GET() {
@@ -32,6 +33,12 @@ export async function GET() {
     if (redisStatus === "error") {
       return NextResponse.json({ status: "error", redis: "error", message: "Cache connection failed" }, { status: 503 });
     }
+
+    // Non-blocking wake up of the queue worker
+    // Using setTimeout to ensure it doesn't block the response or context
+    setTimeout(() => {
+      wakeWorker();
+    }, 0);
 
     return NextResponse.json({ status: "ok", redis: redisStatus });
   } catch (error) {

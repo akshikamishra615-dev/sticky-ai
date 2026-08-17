@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import fs from "fs";
 import path from "path";
 import { prisma } from "@/lib/prisma";
-import { queueProcessDocument } from "@/lib/server/rag";
+import { wakeWorker } from "@/lib/server/rag";
 
 const UPLOAD_DIR = path.join(process.cwd(), ".data/uploads");
 
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     // Only transition if it's currently FAILED, preventing concurrent retries.
     const updateResult = await prisma.document.updateMany({
       where: { id: documentId, userId: userId, status: "FAILED" },
-      data: { status: "PROCESSING_DOCUMENT", errorCode: null, errorMessage: null }
+      data: { status: "QUEUED", errorCode: null, errorMessage: null }
     });
 
     if (updateResult.count === 0) {
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
 
     // Enqueue for processing
     try {
-      await queueProcessDocument(document.id, filePath, userId);
+      wakeWorker();
     } catch (err: unknown) {
       const errorObj = err as { code?: string };
       if (errorObj?.code === "SERVER_SHUTTING_DOWN") {
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
       console.error("[KB ERROR] process background task failed to start:", err);
     }
 
-    return NextResponse.json({ success: true, status: "PROCESSING_DOCUMENT" });
+    return NextResponse.json({ success: true, status: "QUEUED" });
   } catch (error: unknown) {
     console.error("[KB] Retry API error:", error);
     return NextResponse.json({ success: false, error: { code: "SERVER_ERROR", message: "The server could not process the retry. Please try again." } }, { status: 500 });
