@@ -3,14 +3,23 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { wakeWorker } from "@/lib/server/rag";
 import { checkS3ObjectExists } from "@/lib/server/s3";
+import { rateLimiters, getIp, getRateLimitKey } from "@/lib/server/ratelimit";
 
 export async function POST(req: NextRequest) {
   try {
     const session = await auth();
-    if (!session?.user?.id) {
+    const userId = session?.user?.id;
+
+    const ip = getIp(req);
+    const rateLimitKey = getRateLimitKey(ip, userId);
+    const { success } = await rateLimiters.upload.limit(rateLimitKey);
+    if (!success) {
+      return NextResponse.json({ success: false, error: { code: "TOO_MANY_REQUESTS", message: "Upload limit exceeded. Please try again later." } }, { status: 429 });
+    }
+
+    if (!userId) {
       return NextResponse.json({ success: false, error: { code: "UNAUTHORIZED", message: "Unauthorized." } }, { status: 401 });
     }
-    const userId = session.user.id;
 
     const body = await req.json();
     const { documentId } = body;
