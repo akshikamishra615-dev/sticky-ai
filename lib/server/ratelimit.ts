@@ -55,7 +55,12 @@ export const rateLimiters = {
 
 export function getIp(req: Request) {
   const forwardedFor = req.headers.get("x-forwarded-for");
-  if (forwardedFor) return forwardedFor.split(",")[0].trim();
+  if (forwardedFor) {
+    const parts = forwardedFor.split(",").map(p => p.trim()).filter(Boolean);
+    if (parts.length > 0) {
+      return parts[parts.length - 1];
+    }
+  }
   const realIp = req.headers.get("x-real-ip");
   if (realIp) return realIp.trim();
   return "127.0.0.1";
