@@ -9,9 +9,10 @@ interface ConversationHistoryProps {
   activeId: string | null;
   onSelect: (id: string | null) => void;
   onDelete: (id: string) => void;
+  className?: string;
 }
 
-export function ConversationHistory({ conversations, activeId, onSelect, onDelete }: ConversationHistoryProps) {
+export function ConversationHistory({ conversations, activeId, onSelect, onDelete, className }: ConversationHistoryProps) {
   // Group conversations by date
   const grouped = conversations.reduce((acc, conv) => {
     if (!acc[conv.date]) acc[conv.date] = [];
@@ -20,7 +21,7 @@ export function ConversationHistory({ conversations, activeId, onSelect, onDelet
   }, {} as Record<string, typeof conversations>);
 
   return (
-    <div className="sticky top-0 h-[calc(100vh-4rem)] flex flex-col bg-[var(--surface)] border-r border-[var(--border)] w-64 xl:w-72 hidden md:flex shrink-0">
+    <div className={cn("flex flex-col bg-[var(--surface)] shrink-0", className || "sticky top-0 h-[calc(100vh-4rem)] border-r border-[var(--border)] w-64 xl:w-72 hidden md:flex")}>
       <div className="p-4 border-b border-[var(--border)]">
         <Button 
           className="w-full justify-start font-semibold shadow-none border-[var(--border)] text-[var(--primary-text)] hover:border-[var(--ai-accent)] hover:text-[var(--ai-accent)] transition-all" 

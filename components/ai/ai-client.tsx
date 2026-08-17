@@ -6,7 +6,7 @@ import { ChatMessage } from "@/components/ai/chat-message";
 import { ChatInput } from "@/components/ai/chat-input";
 import { TypingIndicator } from "@/components/ai/typing-indicator";
 import { suggestedPrompts, type Conversation, type Message } from "@/lib/mock-data";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Menu, X } from "lucide-react";
 import { createConversation, saveMessage, deleteConversation } from "@/lib/server/conversations";
 import { Button } from "@/components/ui/button";
 
@@ -89,6 +89,7 @@ export function AiClient({ initialConversations, initialDocuments, userName, use
   const [convoToDelete, setConvoToDelete] = React.useState<string | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [toastMessage, setToastMessage] = React.useState<string | null>(null);
+  const [isMobileHistoryOpen, setIsMobileHistoryOpen] = React.useState(false);
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -437,8 +438,19 @@ export function AiClient({ initialConversations, initialDocuments, userName, use
       />
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col relative w-full">
+      <div className="flex-1 flex flex-col relative w-full overflow-hidden">
         
+        {/* Mobile History Toggle Header */}
+        <div className="md:hidden sticky top-0 z-20 flex items-center justify-between p-3 bg-[var(--background)]/80 backdrop-blur-md border-b border-[var(--border)]">
+          <Button variant="ghost" size="sm" onClick={() => setIsMobileHistoryOpen(true)} className="flex items-center gap-2 text-[var(--secondary-text)]" aria-label="Open conversation history">
+            <Menu className="w-5 h-5" />
+            <span className="font-medium">Chat History</span>
+          </Button>
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-[var(--ai-accent)]" />
+          </div>
+        </div>
+
         {/* Chat Messages */}
         <div className="flex-1 w-full pb-32 pt-6">
           {activeConversation?.messages && activeConversation.messages.length > 0 ? (
@@ -509,6 +521,43 @@ export function AiClient({ initialConversations, initialDocuments, userName, use
         <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-5 fade-in duration-300">
           <div className="bg-[var(--surface)] border border-[var(--border)] text-[var(--primary-text)] px-4 py-3 rounded-lg shadow-lg font-medium text-sm">
             {toastMessage}
+          </div>
+        </div>
+      )}
+
+      {/* Mobile History Drawer */}
+      {isMobileHistoryOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black/50 transition-opacity animate-in fade-in" 
+            onClick={() => setIsMobileHistoryOpen(false)}
+            aria-hidden="true"
+          />
+          {/* Drawer */}
+          <div className="relative w-[85%] max-w-sm h-full bg-[var(--surface)] shadow-xl animate-in slide-in-from-left duration-300 flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-[var(--border)]">
+              <h2 className="font-semibold text-[var(--primary-text)]">Chat History</h2>
+              <button 
+                onClick={() => setIsMobileHistoryOpen(false)} 
+                className="p-2 -mr-2 text-[var(--muted-text)] hover:text-[var(--primary-text)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--ai-accent)]"
+                aria-label="Close history"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <ConversationHistory 
+                conversations={conversations} 
+                activeId={activeId} 
+                onSelect={(id) => {
+                  setActiveId(id);
+                  setIsMobileHistoryOpen(false);
+                }} 
+                onDelete={(id) => setConvoToDelete(id)}
+                className="w-full h-full border-r-0"
+              />
+            </div>
           </div>
         </div>
       )}
