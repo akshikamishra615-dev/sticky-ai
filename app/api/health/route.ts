@@ -29,6 +29,10 @@ export async function GET() {
       }
     }
 
+    if (redisStatus === "error") {
+      return NextResponse.json({ status: "error", redis: "error", message: "Cache connection failed" }, { status: 503 });
+    }
+
     return NextResponse.json({ status: "ok", redis: redisStatus });
   } catch (error) {
     // Return a generic error message to avoid leaking stack traces or credentials

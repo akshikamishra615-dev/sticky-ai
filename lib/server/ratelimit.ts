@@ -26,10 +26,14 @@ function withErrorLogging(limiter: any) {
   return {
     limit: async (identifier: string) => {
       try {
-        return await limiter.limit(identifier);
+        const result = await limiter.limit(identifier);
+        if (!result.success) {
+          console.warn(`[RATE LIMIT EXCEEDED] User/IP ${identifier} exceeded limits.`);
+        }
+        return result;
       } catch (error: any) {
-        console.error("[REDIS ERROR] Rate limiter failed:", error?.message || String(error));
-        return { success: false, limit: 0, remaining: 0, reset: Date.now() };
+        console.error("[REDIS ERROR] Rate limiter infrastructure failed:", error?.message || String(error));
+        return { success: false, limit: 0, remaining: 0, reset: Date.now(), isInfrastructureError: true };
       }
     }
   };

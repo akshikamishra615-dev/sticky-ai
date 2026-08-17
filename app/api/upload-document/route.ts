@@ -134,9 +134,19 @@ export async function POST(req: NextRequest) {
     console.log(`[KB PERF] document created`);
 
     // Process asynchronously through the global queue
-    queueProcessDocument(document.id, filePath, userId).catch(err => {
+    try {
+      await queueProcessDocument(document.id, filePath, userId);
+    } catch (err: unknown) {
+      const errorObj = err as { code?: string };
+      if (errorObj?.code === "SERVER_SHUTTING_DOWN") {
+        await prisma.document.delete({ where: { id: document.id } });
+        if (fs.existsSync(filePath)) {
+          await fsPromises.unlink(filePath);
+        }
+        return NextResponse.json({ success: false, error: { code: "SERVICE_UNAVAILABLE", message: "The server is temporarily unavailable while restarting. Please try again shortly." } }, { status: 503 });
+      }
       console.error("[KB ERROR] process background task failed to start:", err);
-    });
+    }
 
     return NextResponse.json({
       success: true,

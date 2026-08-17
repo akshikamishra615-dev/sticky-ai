@@ -37,8 +37,16 @@ async function getExtractor() {
 // Global processing queue (concurrency = 1)
 const processingQueue: Array<() => Promise<void>> = [];
 let isProcessing = false;
+let isShuttingDown = false;
+
+// Graceful shutdown mitigation
+process.on('SIGTERM', () => {
+  console.log("[System] SIGTERM received. Stopping document processing queue.");
+  isShuttingDown = true;
+});
 
 async function processNext() {
+  if (isShuttingDown) return;
   if (isProcessing || processingQueue.length === 0) return;
   isProcessing = true;
   const task = processingQueue.shift();
@@ -56,6 +64,9 @@ async function processNext() {
 }
 
 export async function queueProcessDocument(documentId: string, filePath: string, userId: string) {
+  if (isShuttingDown) {
+    throw { code: "SERVER_SHUTTING_DOWN", message: "Server is shutting down, cannot accept new background jobs." };
+  }
   processingQueue.push(() => processDocument(documentId, filePath, userId));
   setTimeout(() => {
     processNext().catch(err => console.error("[KB ERROR] unhandled processNext error:", err));
@@ -411,32 +422,36 @@ export async function searchKnowledgeBase(query: string, userId: string, documen
   // Hard maximum context size: 15 chunks (~15,000 chars / ~3,500 tokens)
   const MAX_FINAL_CHUNKS = 15;
 
+  const neighborQueries: { documentId: string, chunkIndex: number }[] = [];
+
   for (const row of primaryResults) {
-    if (finalChunks.size >= MAX_FINAL_CHUNKS) break;
-
     if (row.distance < 0.45) {
-      const neighbors = await prisma.documentChunk.findMany({
-        where: {
-          documentId: row.documentId,
-          chunkIndex: { in: [row.chunkIndex - 1, row.chunkIndex + 1] },
-        },
-        include: { document: { select: { name: true } } }
-      });
+      neighborQueries.push({ documentId: row.documentId, chunkIndex: row.chunkIndex - 1 });
+      neighborQueries.push({ documentId: row.documentId, chunkIndex: row.chunkIndex + 1 });
+    }
+  }
 
-      for (const n of neighbors) {
-        if (finalChunks.size >= MAX_FINAL_CHUNKS) break;
+  if (neighborQueries.length > 0) {
+    const neighbors = await prisma.documentChunk.findMany({
+      where: { OR: neighborQueries },
+      include: { document: { select: { name: true } } }
+    });
 
-        const key = `${n.documentId}-${n.chunkIndex}`;
-        if (!finalChunks.has(key)) {
-          finalChunks.set(key, {
-            id: n.id,
-            content: n.content,
-            metadata: n.metadata,
-            documentId: n.documentId,
-            chunkIndex: n.chunkIndex,
-            documentName: n.document.name
-          });
-        }
+    // We do not guarantee strict sequential insertion of neighbors here,
+    // but the final sort (3. Sort for LLM) will correct the ordering.
+    for (const n of neighbors) {
+      if (finalChunks.size >= MAX_FINAL_CHUNKS) break;
+
+      const key = `${n.documentId}-${n.chunkIndex}`;
+      if (!finalChunks.has(key)) {
+        finalChunks.set(key, {
+          id: n.id,
+          content: n.content,
+          metadata: n.metadata,
+          documentId: n.documentId,
+          chunkIndex: n.chunkIndex,
+          documentName: n.document.name
+        });
       }
     }
   }

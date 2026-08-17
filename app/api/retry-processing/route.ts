@@ -45,17 +45,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: { code: "MISSING_FILE", message: "The original PDF is no longer available. Please re-upload it." } }, { status: 400 });
     }
 
-    // Clean existing chunks to ensure retry idempotency
-    await prisma.$executeRaw`DELETE FROM "DocumentChunk" WHERE "documentId" = ${documentId} AND "userId" = ${userId}`;
-
-    // Reset status to PROCESSING_DOCUMENT so UI immediately reflects it
-    await prisma.document.update({
-      where: { id: documentId },
+    // Reset status to PROCESSING_DOCUMENT using an atomic condition
+    // Only transition if it's currently FAILED, preventing concurrent retries.
+    const updateResult = await prisma.document.updateMany({
+      where: { id: documentId, userId: userId, status: "FAILED" },
       data: { status: "PROCESSING_DOCUMENT", errorCode: null, errorMessage: null }
     });
 
+    if (updateResult.count === 0) {
+      return NextResponse.json({ success: false, error: { code: "CONFLICT", message: "Document is already processing or cannot be retried at this time." } }, { status: 409 });
+    }
+
+    // Clean existing chunks to ensure retry idempotency
+    await prisma.$executeRaw`DELETE FROM "DocumentChunk" WHERE "documentId" = ${documentId} AND "userId" = ${userId}`;
+
     // Enqueue for processing
-    queueProcessDocument(document.id, filePath, userId);
+    try {
+      await queueProcessDocument(document.id, filePath, userId);
+    } catch (err: unknown) {
+      const errorObj = err as { code?: string };
+      if (errorObj?.code === "SERVER_SHUTTING_DOWN") {
+        await prisma.document.update({
+          where: { id: documentId },
+          data: { status: "FAILED", errorCode: "SERVICE_UNAVAILABLE", errorMessage: "The server is temporarily unavailable while restarting. Please try again shortly." }
+        });
+        return NextResponse.json({ success: false, error: { code: "SERVICE_UNAVAILABLE", message: "The server is temporarily unavailable while restarting. Please try again shortly." } }, { status: 503 });
+      }
+      console.error("[KB ERROR] process background task failed to start:", err);
+    }
 
     return NextResponse.json({ success: true, status: "PROCESSING_DOCUMENT" });
   } catch (error: unknown) {
