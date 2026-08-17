@@ -5,14 +5,10 @@ import { Prisma } from "@prisma/client";
 import { auth } from "@/auth";
 import fs from "fs";
 import path from "path";
+import os from "os";
 import { pipeline } from "@xenova/transformers";
 import { parseDocumentFile } from "./parsers";
-
-// Ensure upload directory exists
-const UPLOAD_DIR = path.join(process.cwd(), ".data/uploads");
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
+import { downloadFromS3ToTempFile, checkS3ObjectExists, deleteFromS3 } from "./s3";
 
 // Global pipeline instance promise
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -88,16 +84,15 @@ async function processNext() {
           throw new Error("Document URL is missing.");
         }
         
-        const filename = doc.url.split('/').pop();
-        const filePath = filename ? path.join(UPLOAD_DIR, filename) : "";
+        const s3Exists = await checkS3ObjectExists(doc.url);
         
-        if (!filePath || !fs.existsSync(filePath)) {
+        if (!s3Exists) {
            await prisma.document.update({
              where: { id: doc.id },
              data: { status: "FAILED", errorCode: "MISSING_FILE", errorMessage: "File lost during server restart, please re-upload." }
            });
         } else {
-           await processDocument(doc.id, filePath, doc.userId);
+           await processDocument(doc.id, doc.url, doc.userId);
         }
       }
     }
@@ -118,26 +113,22 @@ async function processNext() {
   }
 }
 
-async function processDocument(documentId: string, filePath: string, userId: string) {
+async function processDocument(documentId: string, s3Key: string, userId: string) {
   const startProcessing = performance.now();
   console.log(`[KB PERF] processing started`);
+  let tmpPath: string | null = null;
 
   try {
-    console.log(`[KB DEBUG] file exists: ${fs.existsSync(filePath)}`);
-    if (!fs.existsSync(filePath)) {
-      throw { code: "MISSING_FILE", message: "The uploaded file could not be found on the server." };
-    }
-
-    const stats = fs.statSync(filePath);
-    console.log(`[KB DEBUG] file size: ${stats.size}`);
-
     const doc = await prisma.document.findUnique({ where: { id: documentId } });
     if (!doc) throw { code: "MISSING_DOCUMENT", message: "Document record not found in database." };
 
-    // 1. Read file buffer
-    const buffer = fs.readFileSync(filePath);
-
-    const filename = filePath.split(/[/\\]/).pop() || "";
+    // 1. Download to temporary file
+    tmpPath = path.join(os.tmpdir(), `${documentId}.tmp`);
+    await downloadFromS3ToTempFile(s3Key, tmpPath);
+    
+    // Read file buffer
+    const buffer = fs.readFileSync(tmpPath);
+    const filename = s3Key.split(/[/\\]/).pop() || "";
 
     // 2. Extract text & metadata using central parser
     console.log(`[KB PERF] parser started`);
@@ -147,7 +138,7 @@ async function processDocument(documentId: string, filePath: string, userId: str
     const onOcrScanning = async () => {
       await prisma.document.update({
         where: { id: documentId },
-        data: { status: "OCR_SCANNING" } // Temporarily show OCR scanning
+        data: { status: "OCR_SCANNING" }
       });
     };
 
@@ -155,7 +146,7 @@ async function processDocument(documentId: string, filePath: string, userId: str
     console.log(`[MEMORY] RSS after parsing: ${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB`);
     console.log(`[KB PERF] parser finished: ${Math.round(performance.now() - parserStart)} ms`);
 
-    // 3. Chunk text (respecting parser chunks)
+    // 3. Chunk text
     const chunkingStart = performance.now();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const finalChunks: { text: string; metadata: any }[] = [];
@@ -171,10 +162,6 @@ async function processDocument(documentId: string, filePath: string, userId: str
     }
     console.log(`[KB PERF] chunking finished: ${Math.round(performance.now() - chunkingStart)} ms`);
 
-    const totalExtractedLength = finalChunks.reduce((acc, c) => acc + c.text.length, 0);
-    console.log(`[KB PERF] extracted text length: ${totalExtractedLength}`);
-    console.log(`[KB PERF] chunk count: ${finalChunks.length}`);
-
     if (finalChunks.length === 0) {
       throw { code: "SCANNED_PDF_WITH_NO_TEXT", message: "No usable text chunks found in this document." };
     }
@@ -182,7 +169,6 @@ async function processDocument(documentId: string, filePath: string, userId: str
     const extractor = await getExtractor();
 
     console.log(`[KB PERF] embedding started`);
-    console.log(`[MEMORY] RSS before embedding: ${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB`);
     const embeddingStart = performance.now();
 
     await prisma.document.update({
@@ -190,7 +176,6 @@ async function processDocument(documentId: string, filePath: string, userId: str
       data: { status: "GENERATING_EMBEDDINGS" }
     });
 
-    // Batch inference settings
     const batchSize = 16;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const embeddedChunks: { documentId: string, content: string, metadata: any, vector: number[] }[] = [];
@@ -211,16 +196,11 @@ async function processDocument(documentId: string, filePath: string, userId: str
           });
         }
       }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (e: any) {
-      console.error("[KB ERROR] stage: Embedding");
-      console.error("[KB ERROR] name:", e?.name);
-      console.error("[KB ERROR] message:", e?.message);
-      console.error("[KB ERROR] stack:", e?.stack);
+    } catch (e: unknown) {
+      console.error("[KB ERROR] stage: Embedding", e);
       throw { code: "EMBEDDING_FAILURE", message: "We couldn't generate the AI embeddings. Please try again." };
     }
 
-    console.log(`[MEMORY] RSS after embedding: ${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB`);
     console.log(`[KB PERF] embedding finished: ${Math.round(performance.now() - embeddingStart)} ms`);
 
     console.log(`[KB PERF] indexing started`);
@@ -231,33 +211,23 @@ async function processDocument(documentId: string, filePath: string, userId: str
       data: { status: "INDEXING" }
     });
 
-    try {
-      // 5. Index into pgvector
-      let chunkIndex = 0;
-      for (const chunk of embeddedChunks) {
-        const vectorString = `[${chunk.vector.join(',')}]`;
-        await prisma.$executeRaw`
-          INSERT INTO "DocumentChunk" ("id", "documentId", "userId", "content", "metadata", "embedding", "createdAt", "chunkIndex")
-          VALUES (
-            gen_random_uuid(),
-            ${chunk.documentId},
-            ${userId},
-            ${chunk.content},
-            ${chunk.metadata ? JSON.stringify(chunk.metadata) : null}::jsonb,
-            ${vectorString}::vector,
-            NOW(),
-            ${chunkIndex}
-          )
-        `;
-        chunkIndex++;
-      }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (e: any) {
-      console.error("[KB ERROR] stage: Indexing");
-      console.error("[KB ERROR] name:", e?.name);
-      console.error("[KB ERROR] message:", e?.message);
-      console.error("[KB ERROR] stack:", e?.stack);
-      throw { code: "VECTOR_INDEXING_FAILURE", message: "We couldn't index this document. Please try again." };
+    let chunkIndex = 0;
+    for (const chunk of embeddedChunks) {
+      const vectorString = `[${chunk.vector.join(',')}]`;
+      await prisma.$executeRaw`
+        INSERT INTO "DocumentChunk" ("id", "documentId", "userId", "content", "metadata", "embedding", "createdAt", "chunkIndex")
+        VALUES (
+          gen_random_uuid(),
+          ${chunk.documentId},
+          ${userId},
+          ${chunk.content},
+          ${chunk.metadata ? JSON.stringify(chunk.metadata) : null}::jsonb,
+          ${vectorString}::vector,
+          NOW(),
+          ${chunkIndex}
+        )
+      `;
+      chunkIndex++;
     }
 
     console.log(`[KB PERF] indexing finished: ${Math.round(performance.now() - insertStart)} ms`);
@@ -267,39 +237,36 @@ async function processDocument(documentId: string, filePath: string, userId: str
       data: { status: "READY" }
     });
 
-    console.log(`[KB PERF] document READY`);
     console.log(`[KB] Total processing time: ${Math.round(performance.now() - startProcessing)}ms`);
+    
+    // Cleanup S3 object only on absolute success
+    await deleteFromS3(s3Key).catch(err => {
+      console.error("[KB ERROR] Failed to delete S3 object after processing:", err);
+    });
 
-    // Clean up temporary file ONLY on success
-    try {
-      if (fs.existsSync(filePath)) {
-        await fs.promises.unlink(filePath);
-        console.log(`[KB DEBUG] Cleaned up temporary file: ${filePath}`);
-      }
-    } catch (cleanupError) {
-      console.error("[KB ERROR] Failed to clean up temporary file:", cleanupError);
-    }
+  } catch (error: unknown) {
+    console.error("[KB ERROR] stage: ProcessDocument Catch", error);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } catch (error: any) {
-    console.error("[KB ERROR] stage: ProcessDocument Catch");
-    console.error("[KB ERROR] name:", error?.name || error?.code);
-    console.error("[KB ERROR] message:", error?.message);
-    console.error("[KB ERROR] stack:", error?.stack);
-
-    const errorCode = error?.code || "UNKNOWN_PROCESSING_ERROR";
-    const errorMessage = error?.message || "We couldn't process this document. Please try again.";
+    const errObj = error as { code?: string; message?: string };
+    const errorCode = errObj?.code || "UNKNOWN_PROCESSING_ERROR";
+    const errorMessage = errObj?.message || "We couldn't process this document. Please try again.";
 
     try {
-      // Cleanup partial chunks on failure
       await prisma.$executeRaw`DELETE FROM "DocumentChunk" WHERE "documentId" = ${documentId} AND "userId" = ${userId}`;
-
       await prisma.document.update({
         where: { id: documentId },
         data: { status: "FAILED", errorCode, errorMessage }
       });
     } catch (e) {
       console.error("[KB ERROR] Fallback update failed:", e);
+    }
+  } finally {
+    if (tmpPath && fs.existsSync(tmpPath)) {
+      try {
+        fs.unlinkSync(tmpPath);
+      } catch (e) {
+        console.error(`[KB ERROR] Failed to clean up tmp file: ${tmpPath}`, e);
+      }
     }
   }
 }
@@ -358,30 +325,23 @@ export async function deleteDocument(documentId: string) {
   const userId = session.user.id;
 
   const document = await prisma.document.findUnique({
-    where: { id: documentId }
-  });
-
-  if (!document || document.userId !== userId) {
-    throw new Error("Document not found or unauthorized");
-  }
-
-  // Delete from DB (cascades to chunks/vectors safely due to schema)
-  await prisma.document.deleteMany({
     where: { id: documentId, userId }
   });
 
-  // Try physical deletion
-  try {
-    if (document.url) {
-      const filename = document.url.split('/').pop();
-      if (filename) {
-        const filePath = path.join(UPLOAD_DIR, filename);
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      }
-    }
-  } catch (e) {
-    console.error("File cleanup failed:", e);
+  if (!document) {
+    throw new Error("Document not found or unauthorized");
   }
+
+  // Delete from S3
+  if (document.url) {
+    await deleteFromS3(document.url).catch(e => {
+      console.error("[KB ERROR] Failed to delete S3 object during deleteDocument:", e);
+    });
+  }
+
+  await prisma.document.delete({
+    where: { id: documentId }
+  });
 
   return true;
 }

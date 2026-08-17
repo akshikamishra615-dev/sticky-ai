@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import fs from "fs";
-import path from "path";
 import { prisma } from "@/lib/prisma";
 import { wakeWorker } from "@/lib/server/rag";
-
-const UPLOAD_DIR = path.join(process.cwd(), ".data/uploads");
+import { checkS3ObjectExists } from "@/lib/server/s3";
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,22 +27,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: { code: "NOT_FOUND", message: "Document not found or unauthorized." } }, { status: 404 });
     }
 
+    if (document.status !== "FAILED") {
+      return NextResponse.json({ success: false, error: { code: "INVALID_STATUS", message: "Only FAILED documents can be retried" } }, { status: 400 });
+    }
+
     if (!document.url) {
       return NextResponse.json({ success: false, error: { code: "MISSING_FILE", message: "Document URL is missing." } }, { status: 400 });
     }
 
-    // Verify physical file exists
-    const filename = document.url.split('/').pop();
-    if (!filename) {
-      return NextResponse.json({ success: false, error: { code: "INVALID_URL", message: "Invalid document URL." } }, { status: 400 });
+    // Verify file exists in S3
+    const s3Exists = await checkS3ObjectExists(document.url);
+    if (!s3Exists) {
+      return NextResponse.json({ success: false, error: { code: "MISSING_FILE", message: "The document file was lost. Please re-upload." } }, { status: 400 });
     }
 
-    const filePath = path.join(UPLOAD_DIR, filename);
-    if (!fs.existsSync(filePath)) {
-      return NextResponse.json({ success: false, error: { code: "MISSING_FILE", message: "The original PDF is no longer available. Please re-upload it." } }, { status: 400 });
-    }
-
-    // Reset status to PROCESSING_DOCUMENT using an atomic condition
+    // Reset status to QUEUED using an atomic condition
     // Only transition if it's currently FAILED, preventing concurrent retries.
     const updateResult = await prisma.document.updateMany({
       where: { id: documentId, userId: userId, status: "FAILED" },

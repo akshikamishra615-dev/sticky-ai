@@ -1,18 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import fs from "fs";
-import fsPromises from "fs/promises";
-import path from "path";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { wakeWorker } from "@/lib/server/rag";
 import { rateLimiters, getIp, getRateLimitKey } from "@/lib/server/ratelimit";
-
-const UPLOAD_DIR = path.join(process.cwd(), ".data/uploads");
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
+import { uploadToS3, deleteFromS3 } from "@/lib/server/s3";
 import { SUPPORTED_FORMATS } from "@/lib/shared/file-validation";
 
 export async function POST(req: NextRequest) {
@@ -50,19 +42,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: { code: "EMPTY_FILE", message: "This file appears to be empty." } }, { status: 400 });
     }
 
-    const isImage = file.type.startsWith('image/');
-    if (isImage) console.log(`[IMAGE PERF] upload request started`);
-    console.log(`[KB PERF] upload received`);
-
     const originalName = file.name;
     const ext = originalName.split('.').pop()?.toLowerCase() || "";
-
-    console.log("[KB Upload] received:", {
-      filename: originalName,
-      size: file.size,
-      mime: file.type,
-      extension: ext
-    });
 
     const format = SUPPORTED_FORMATS.find(f => f.ext === ext);
 
@@ -82,82 +63,77 @@ export async function POST(req: NextRequest) {
     }
 
     const startUpload = performance.now();
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
-    // Generate SHA-256 hash of the file content for deduplication
+    // Generate hash for duplicate detection
     const fileHash = crypto.createHash("sha256").update(buffer).digest("hex");
-    const safeFilename = `${userId}-${fileHash}.${ext}`;
-    const fileUrl = `/api/documents/${safeFilename}`;
-    const filePath = path.join(UPLOAD_DIR, safeFilename);
+    const s3Key = `uploads/${userId}/${fileHash}.${ext}`;
 
-    // Duplicate check: Prevent uploading the same exact file if it's already processing or ready
+    // Duplicate check
     const existingDoc = await prisma.document.findFirst({
       where: {
         userId,
-        url: fileUrl,
-        status: {
-          not: "FAILED"
-        }
+        url: s3Key,
+        status: { not: "FAILED" }
       }
     });
 
     if (existingDoc) {
-      console.log(`[KB Upload] duplicate file detected: ${safeFilename}`);
       return NextResponse.json({ success: false, error: { code: "DUPLICATE_FILE", message: "This exact document has already been uploaded." } }, { status: 400 });
     }
 
-    if (ext === 'pdf') {
-      if (buffer.length < 4 || buffer.toString('utf8', 0, 4) !== '%PDF') {
-        console.log("[KB Upload] validation: FAIL - invalid PDF signature");
-        return NextResponse.json({ success: false, error: { code: "INVALID_FILE_TYPE", message: "Invalid PDF signature." } }, { status: 400 });
-      }
-    }
-
-    // Use async file writing to prevent blocking the Node.js event loop
-    await fsPromises.writeFile(filePath, buffer);
-
-    console.log(`[KB PERF] file saved in ${Math.round(performance.now() - startUpload)} ms`);
-
-    const document = await prisma.document.create({
-      data: {
-        userId,
-        name: originalName,
-        mimeType: file.type,
-        size: file.size,
-        status: "QUEUED",
-        sourceType: format.type,
-        url: fileUrl
-      }
-    });
-
-    console.log(`[KB PERF] document created`);
-
-    // Process asynchronously through the global queue
+    // 1. Upload to S3
     try {
-      wakeWorker();
-    } catch (err: unknown) {
-      const errorObj = err as { code?: string };
-      if (errorObj?.code === "SERVER_SHUTTING_DOWN") {
-        await prisma.document.delete({ where: { id: document.id } });
-        if (fs.existsSync(filePath)) {
-          await fsPromises.unlink(filePath);
-        }
-        return NextResponse.json({ success: false, error: { code: "SERVICE_UNAVAILABLE", message: "The server is temporarily unavailable while restarting. Please try again shortly." } }, { status: 503 });
-      }
-      console.error("[KB ERROR] process background task failed to start:", err);
+      await uploadToS3(s3Key, buffer, file.type);
+    } catch (error) {
+      console.error("[KB ERROR] Failed to upload file to S3:", error);
+      return NextResponse.json({ success: false, error: { code: "STORAGE_ERROR", message: "Failed to upload file to storage." } }, { status: 500 });
     }
 
-    return NextResponse.json({
-      success: true,
-      id: document.id,
-      name: document.name,
-      size: document.size,
-      status: document.status,
-      sourceType: document.sourceType,
-      createdAt: document.createdAt,
-      updatedAt: document.updatedAt
-    });
+    console.log(`[KB PERF] file uploaded to S3 in ${Math.round(performance.now() - startUpload)} ms`);
+
+    // 2. Create DB record
+    try {
+      const document = await prisma.document.create({
+        data: {
+          userId,
+          name: originalName,
+          mimeType: file.type,
+          size: file.size,
+          status: "QUEUED",
+          sourceType: format.type,
+          url: s3Key
+        }
+      });
+
+      try {
+        wakeWorker();
+      } catch (err: unknown) {
+        const errorObj = err as { code?: string };
+        if (errorObj?.code === "SERVER_SHUTTING_DOWN") {
+          await prisma.document.delete({ where: { id: document.id } });
+          await deleteFromS3(s3Key).catch(e => console.error("[KB ERROR] Cleanup failed:", e));
+          return NextResponse.json({ success: false, error: { code: "SERVICE_UNAVAILABLE", message: "The server is temporarily unavailable." } }, { status: 503 });
+        }
+        console.error("[KB ERROR] process background task failed to start:", err);
+      }
+
+      return NextResponse.json({
+        success: true,
+        id: document.id,
+        name: document.name,
+        size: document.size,
+        status: document.status,
+        sourceType: document.sourceType,
+        createdAt: document.createdAt,
+        updatedAt: document.updatedAt
+      });
+    } catch (error) {
+      console.error("[KB ERROR] Failed to create document record:", error);
+      await deleteFromS3(s3Key).catch(e => console.error("[KB ERROR] Orphaned S3 object cleanup failed:", e));
+      return NextResponse.json({ success: false, error: { code: "SERVER_ERROR", message: "Failed to save document record." } }, { status: 500 });
+    }
   } catch (error) {
     console.error("[KB] Upload error:", error);
     return NextResponse.json({ success: false, error: { code: "SERVER_ERROR", message: "The server could not process the upload. Please try again." } }, { status: 500 });
