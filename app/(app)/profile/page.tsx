@@ -119,8 +119,8 @@ export default function ProfilePage() {
         {/* Profile Picture */}
         <section className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-[var(--primary-text)] mb-4">Profile Picture</h2>
-          <div className="flex items-center space-x-6">
-            <div className="relative h-24 w-24 rounded-full bg-[var(--ai-accent)]/20 flex items-center justify-center text-[var(--ai-accent)] font-bold text-3xl overflow-hidden shadow-sm">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-0 sm:space-x-6">
+            <div className="relative h-24 w-24 shrink-0 rounded-full bg-[var(--ai-accent)]/20 flex items-center justify-center text-[var(--ai-accent)] font-bold text-3xl overflow-hidden shadow-sm">
               {session?.user?.image ? (
                 <img src={session.user.image} alt="" className="h-full w-full object-cover" />
               ) : (

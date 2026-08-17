@@ -449,8 +449,8 @@ export function KnowledgeBaseClient({ initialDocuments }: { initialDocuments: Do
                             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--surface-hover)]">
                               {getFileIcon(doc.sourceType, doc.name)}
                             </div>
-                            <div className="truncate">
-                              <h3 className="font-semibold text-[var(--primary-text)] truncate w-40">{doc.name}</h3>
+                            <div className="flex-1 min-w-0 pr-2">
+                              <h3 className="font-semibold text-[var(--primary-text)] truncate">{doc.name}</h3>
                               <p className="text-xs text-[var(--muted-text)]">{(doc.size / 1024).toFixed(1)} KB</p>
                             </div>
                           </div>
