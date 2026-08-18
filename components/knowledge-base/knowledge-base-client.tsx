@@ -370,12 +370,14 @@ export function KnowledgeBaseClient({
                 
                 return (
                   <div key={item.clientId} className={`flex flex-col rounded-xl border p-4 ${item.status === 'FAILED' ? 'border-[var(--error)]/50 bg-[var(--error)]/5' : 'border-[var(--border)] bg-[var(--surface)]'}`}>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        {getFileIcon("UPLOAD", item.file.name)}
-                        <span className="font-medium text-[var(--primary-text)] truncate max-w-[200px] sm:max-w-md">{item.file.name}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          {getFileIcon("UPLOAD", item.file.name)}
+                          <div className="flex-1 min-w-0">
+                            <span className="block font-medium text-[var(--primary-text)] truncate">{item.file.name}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
                         {item.status === 'FAILED' ? (
                           <div className="flex items-center gap-2">
                             {isRetryable && (
@@ -429,13 +431,15 @@ export function KnowledgeBaseClient({
                 const isRetryable = doc.errorCode ? RETRYABLE_ERRORS.includes(doc.errorCode) : false;
                 
                 return (
-                  <div key={doc.id} className={`flex flex-col rounded-xl border p-4 ${doc.status === 'FAILED' ? 'border-[var(--error)]/50 bg-[var(--error)]/5' : 'border-[var(--ai-accent)] bg-[var(--ai-accent)]/5'}`}>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        {getFileIcon(doc.sourceType, doc.name)}
-                        <span className="font-medium text-[var(--primary-text)] truncate max-w-[200px] sm:max-w-md">{doc.name}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
+                    <div key={doc.id} className={`flex flex-col rounded-xl border p-4 ${doc.status === 'FAILED' ? 'border-[var(--error)]/50 bg-[var(--error)]/5' : 'border-[var(--ai-accent)] bg-[var(--ai-accent)]/5'}`}>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          {getFileIcon(doc.sourceType, doc.name)}
+                          <div className="flex-1 min-w-0">
+                            <span className="block font-medium text-[var(--primary-text)] truncate">{doc.name}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
                         {doc.status === 'FAILED' && isRetryable && (
                           <Button variant="outline" size="sm" onClick={() => handleRetryProcessing(doc.id)} className="h-8 text-xs text-[var(--error)] hover:bg-[var(--error)]/10 hover:text-[var(--error)]">
                             <RefreshCw className="h-3 w-3 mr-1" /> Retry Processing
@@ -525,8 +529,8 @@ export function KnowledgeBaseClient({
                     <div key={doc.id} className="group relative flex flex-col justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 hover:border-[var(--ai-accent)]/50 transition-colors">
                       <div>
                         <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--surface-hover)]">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <div className="flex h-10 w-10 items-center justify-center shrink-0 rounded-lg bg-[var(--surface-hover)]">
                               {getFileIcon(doc.sourceType, doc.name)}
                             </div>
                             <div className="flex-1 min-w-0 pr-2">
