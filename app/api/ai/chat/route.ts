@@ -268,9 +268,9 @@ Rewritten Query:`;
       }
     } });
 
-    console.log("[AI Chat Route] Stream initialized. Returning text stream response.");
+    console.log("[AI Chat Route] Stream initialized. Returning data stream response.");
 
-    return result.toTextStreamResponse({
+    return result.toUIMessageStreamResponse({
       headers: {
         'Cache-Control': 'no-cache'
       }
