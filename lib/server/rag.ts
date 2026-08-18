@@ -517,3 +517,22 @@ export async function searchKnowledgeBase(query: string, userId: string, documen
     distance: r.distance
   }));
 }
+
+export async function checkDocumentStatus(documentId: string) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  const doc = await prisma.document.findUnique({
+    where: {
+      id: documentId,
+      userId: session.user.id
+    },
+    select: {
+      id: true,
+      status: true,
+      name: true
+    }
+  });
+
+  return doc;
+}

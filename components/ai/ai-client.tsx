@@ -291,10 +291,17 @@ export function AiClient({ initialConversations, initialDocuments, userName, use
 
   React.useEffect(() => {
     const dashboardQuery = sessionStorage.getItem("dashboard_ai_query");
-    if (dashboardQuery) {
-      sessionStorage.removeItem("dashboard_ai_query");
+    const dashboardDocId = sessionStorage.getItem("dashboard_ai_document_id");
+    if (dashboardQuery || dashboardDocId) {
+      if (dashboardQuery) sessionStorage.removeItem("dashboard_ai_query");
+      if (dashboardDocId) sessionStorage.removeItem("dashboard_ai_document_id");
+      
+      const query = dashboardQuery || (dashboardDocId ? `Please analyze the attached document.` : "");
+      const isRAG = !!dashboardDocId;
+      const docIds = dashboardDocId ? [dashboardDocId] : undefined;
+      
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      handleSend(dashboardQuery, false, "Auto Detect");
+      handleSend(query, isRAG, "Auto Detect", docIds);
     }
   }, [handleSend]);
 

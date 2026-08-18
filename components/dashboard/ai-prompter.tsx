@@ -6,6 +6,7 @@ import { suggestedPrompts } from "@/lib/mock-data";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
+import { checkDocumentStatus } from "@/lib/server/rag";
 
 export function AiPrompter() {
   const router = useRouter();
@@ -14,7 +15,7 @@ export function AiPrompter() {
   
   // Attachment State
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
+  const [attachment, setAttachment] = React.useState<{ id?: string; name: string; status: 'UPLOADING' | 'PROCESSING' | 'READY' | 'FAILED' } | null>(null);
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -22,6 +23,48 @@ export function AiPrompter() {
   const [isRecording, setIsRecording] = React.useState(false);
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
   const audioChunksRef = React.useRef<Blob[]>([]);
+
+  // Polling for attachment status
+  React.useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    let isActive = true;
+    
+    const poll = async () => {
+      if (!isActive) return;
+      if (attachment?.id && attachment.status === 'PROCESSING') {
+        try {
+          const doc = await checkDocumentStatus(attachment.id);
+          if (!isActive) return;
+
+          if (!doc) {
+            setAttachment(null);
+            return;
+          }
+
+          if (doc.status === 'READY' || doc.status === 'FAILED') {
+            setAttachment(prev => prev ? { ...prev, status: doc.status as 'READY' | 'FAILED' } : null);
+            if (doc.status === 'FAILED') setError("Failed to process attachment");
+            return;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+        
+        if (isActive) {
+          timeoutId = setTimeout(poll, 3000);
+        }
+      }
+    };
+    
+    if (attachment?.id && attachment.status === 'PROCESSING') {
+      poll();
+    }
+    
+    return () => {
+      isActive = false;
+      clearTimeout(timeoutId);
+    };
+  }, [attachment?.id, attachment?.status]);
 
   // Cleanup MediaRecorder on unmount
   React.useEffect(() => {
@@ -35,33 +78,19 @@ export function AiPrompter() {
   }, []);
 
   const handleSend = async () => {
-    if ((!query.trim() && !selectedFile) || isProcessing || isRecording) return;
+    if (!query.trim() && !attachment) return;
+    if (isProcessing || isRecording) return;
+    if (attachment && attachment.status !== 'READY') return;
     
     setIsProcessing(true);
     setError(null);
-    let finalMessage = query.trim();
+    const finalMessage = query.trim() || (attachment ? `Please analyze the attached document: ${attachment.name}` : "");
 
     try {
-      if (selectedFile) {
-        const formData = new FormData();
-        formData.append("file", selectedFile);
-        
-        const res = await fetch("/api/ai/parse-attachment", {
-          method: "POST",
-          body: formData
-        });
-        
-        const data = await res.json();
-        
-        if (!res.ok || !data.success) {
-          throw new Error(data.error?.message || data.error || "Failed to process attachment");
-        }
-        
-        finalMessage = `[Attached Document: ${selectedFile.name}]\n\n${data.text}\n\n${finalMessage}`;
-      }
-
-      // We save the query to sessionStorage so ai-client.tsx can pick it up
       sessionStorage.setItem("dashboard_ai_query", finalMessage);
+      if (attachment?.id && attachment.status === 'READY') {
+        sessionStorage.setItem("dashboard_ai_document_id", attachment.id);
+      }
       router.push("/ai");
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : "An error occurred";
@@ -140,138 +169,170 @@ export function AiPrompter() {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      const file = e.target.files[0];
+      setAttachment({ name: file.name, status: 'UPLOADING' });
       setError(null);
+      
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        
+        const res = await fetch("/api/upload-document", {
+          method: "POST",
+          body: formData
+        });
+        const data = await res.json();
+        
+        if (!res.ok || !data.success) {
+          throw new Error(data.error?.message || "Failed to upload file");
+        }
+        
+        setAttachment({ 
+          id: data.id, 
+          name: file.name, 
+          status: data.status === 'READY' ? 'READY' : 'PROCESSING' 
+        });
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : "Upload failed";
+        setError(errorMessage);
+        setAttachment(null);
+      }
+      
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto space-y-6 my-10 relative">
-      <div className="absolute inset-0 bg-gradient-to-r from-[var(--ai-accent)]/10 to-[var(--ai-accent)]/5 blur-3xl -z-10 rounded-full" />
-      
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        onChange={handleFileChange} 
-        className="hidden" 
-      />
-
+    <div className="w-full max-w-3xl mx-auto flex flex-col items-center animate-in fade-in zoom-in duration-500 delay-150 fill-mode-both">
       <div 
         className={cn(
-          "relative flex flex-col rounded-3xl border bg-[var(--surface)] p-3 shadow-lg transition-all duration-500",
-          isFocused 
-            ? "border-[var(--ai-accent)] shadow-[var(--ai-accent)]/20 ring-4 ring-[var(--ai-accent)]/10" 
-            : "border-[var(--border)] hover:border-[var(--muted-text)] shadow-black/5 dark:shadow-white/5"
+          "w-full bg-[var(--surface)] border-2 rounded-2xl shadow-lg transition-all duration-300 relative",
+          isFocused ? "border-[var(--ai-accent)] shadow-[0_0_20px_rgba(var(--ai-accent-rgb),0.15)] ring-4 ring-[var(--ai-accent)]/10" : "border-[var(--border)] hover:border-[var(--ai-accent)]/50",
+          error ? "border-[var(--error)] hover:border-[var(--error)]" : ""
         )}
       >
         {error && (
-          <div className="px-4 pt-2">
-            <div className="text-xs text-[var(--error)] bg-[var(--error)]/10 px-2 py-1 rounded">
-              {error}
-            </div>
+          <div className="px-4 py-2 text-xs text-[var(--error)] bg-[var(--error)]/5 border-b border-[var(--error)]/20 rounded-t-2xl">
+            {error}
           </div>
         )}
         
-        {selectedFile && (
-          <div className="px-4 pt-2 flex items-center">
-            <div className="flex items-center gap-2 bg-[var(--elevated)] px-3 py-1.5 rounded-lg border border-[var(--border)] max-w-full">
-              <Paperclip className="w-4 h-4 shrink-0 text-[var(--ai-accent)]" />
-              <span className="text-sm text-[var(--primary-text)] truncate max-w-[200px] sm:max-w-xs">{selectedFile.name}</span>
-              <button 
-                onClick={() => setSelectedFile(null)}
-                className="ml-1 text-[var(--muted-text)] hover:text-[var(--error)] transition-colors shrink-0"
-                disabled={isProcessing}
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          onChange={handleFileChange} 
+          className="hidden" 
+        />
 
-        <div className="flex px-4 pt-4 pb-4">
-          <input
-            type="text"
-            placeholder={isRecording ? "Listening..." : "What do you want to learn today?"}
-            className="flex-1 bg-transparent text-lg md:text-xl text-[var(--primary-text)] placeholder:text-[var(--muted-text)] focus:outline-none"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            disabled={isProcessing || isRecording}
-          />
-        </div>
-        
-        <div className="flex items-center justify-between px-2 pt-2">
-          <div className="flex items-center space-x-1">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="text-[var(--secondary-text)] rounded-full h-10 w-10 hover:bg-[var(--elevated)] hover:text-[var(--primary-text)]"
-              onClick={() => fileInputRef.current?.click()}
+        <div className="flex flex-col p-2">
+          {attachment && (
+            <div className="px-2 py-1 flex items-center">
+              <div className="flex items-center gap-2 bg-[var(--elevated)] px-3 py-1.5 rounded-lg border border-[var(--border)] max-w-full">
+                {attachment.status === 'READY' ? (
+                  <Paperclip className="w-4 h-4 shrink-0 text-[var(--ai-accent)]" />
+                ) : attachment.status === 'FAILED' ? (
+                  <X className="w-4 h-4 shrink-0 text-[var(--error)]" />
+                ) : (
+                  <Loader2 className="w-4 h-4 shrink-0 animate-spin text-[var(--ai-accent)]" />
+                )}
+                <span className="text-sm text-[var(--primary-text)] truncate max-w-[200px] sm:max-w-xs">{attachment.name}</span>
+                
+                {attachment.status === 'UPLOADING' && <span className="text-xs text-[var(--muted-text)] ml-1 shrink-0">(Uploading...)</span>}
+                {attachment.status === 'PROCESSING' && <span className="text-xs text-[var(--muted-text)] ml-1 shrink-0">(Processing...)</span>}
+                {attachment.status === 'FAILED' && <span className="text-xs text-[var(--error)] ml-1 shrink-0">(Failed)</span>}
+
+                <button 
+                  onClick={() => setAttachment(null)}
+                  className="ml-2 text-[var(--muted-text)] hover:text-[var(--error)] transition-colors shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="flex items-center">
+            <input
+              type="text"
+              placeholder="What are we working on today?"
+              className="flex-1 bg-transparent px-4 py-3 text-[var(--primary-text)] placeholder:text-[var(--muted-text)] focus:outline-none text-base sm:text-lg"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+              onKeyDown={handleKeyDown}
               disabled={isProcessing || isRecording}
-              aria-label="Attach file"
-            >
-              <Paperclip className="h-5 w-5" />
-            </Button>
-            
-            {isRecording ? (
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="text-[var(--error)] bg-[var(--error)]/10 rounded-full h-10 w-10 animate-pulse"
-                onClick={stopRecording}
-                aria-label="Stop recording"
+            />
+
+            <div className="flex items-center space-x-2 pr-2 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn("h-10 w-10 rounded-full transition-colors", attachment ? "text-[var(--ai-accent)] bg-[var(--ai-accent)]/10" : "text-[var(--muted-text)] hover:text-[var(--primary-text)] hover:bg-[var(--elevated)]")}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isProcessing || isRecording}
               >
-                <Square className="h-5 w-5 fill-current" />
+                <Paperclip className="h-5 w-5" />
               </Button>
-            ) : (
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="text-[var(--secondary-text)] rounded-full h-10 w-10 hover:bg-[var(--elevated)] hover:text-[var(--primary-text)]"
-                onClick={startRecording}
-                disabled={isProcessing}
-                aria-label="Start voice input"
+              
+              {!isRecording ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 rounded-full text-[var(--muted-text)] hover:text-[var(--primary-text)] hover:bg-[var(--elevated)] transition-colors"
+                  onClick={startRecording}
+                  disabled={isProcessing}
+                >
+                  <Mic className="h-5 w-5" />
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 rounded-full text-[var(--error)] hover:bg-[var(--error)]/10 transition-colors animate-pulse"
+                  onClick={stopRecording}
+                >
+                  <Square className="h-4 w-4 fill-current" />
+                </Button>
+              )}
+
+              <Button
+                size="icon"
+                onClick={handleSend}
+                disabled={(!query.trim() && !attachment) || isProcessing || isRecording || (attachment !== null && attachment.status !== 'READY')}
+                className={cn(
+                  "h-10 w-10 rounded-full transition-all shadow-md",
+                  (query.trim() || attachment?.status === 'READY') && !isProcessing
+                    ? "bg-[var(--ai-accent)] text-white hover:opacity-90 hover:scale-105" 
+                    : "bg-[var(--elevated)] text-[var(--muted-text)] cursor-not-allowed"
+                )}
               >
-                <Mic className="h-5 w-5" />
+                {isProcessing && !attachment ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Send className="h-5 w-5 ml-0.5" />
+                )}
               </Button>
-            )}
+            </div>
           </div>
-          
-          <Button 
-            variant="ai" 
-            size="icon" 
-            className="rounded-full h-11 w-11 transition-all duration-300"
-            disabled={(!query.trim() && !selectedFile) || isProcessing || isRecording}
-            onClick={handleSend}
-            aria-label="Ask Sticky AI"
-          >
-            {isProcessing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-          </Button>
         </div>
       </div>
 
-      <div className="flex flex-col items-center gap-3 pt-2">
-        <span className="text-xs font-semibold text-[var(--muted-text)] uppercase tracking-widest">Try asking</span>
-        <div className="flex flex-wrap justify-center items-center gap-2 px-2 max-w-2xl">
-          {suggestedPrompts.map((prompt, idx) => (
-            <button
-              key={idx}
-              onClick={() => {
-                setQuery(prompt);
-                sessionStorage.setItem("dashboard_ai_query", prompt);
-                router.push("/ai");
-              }}
-              disabled={isProcessing || isRecording}
-              className="inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm font-medium text-[var(--secondary-text)] transition-all duration-300 hover:border-[var(--ai-accent)] hover:text-[var(--ai-accent)] hover:shadow-sm hover:shadow-[var(--ai-accent)]/10 focus:outline-none focus:ring-2 focus:ring-[var(--ai-accent)] focus:ring-offset-2 focus:ring-offset-[var(--background)] disabled:opacity-50"
-            >
-              {prompt}
-            </button>
-          ))}
-        </div>
+      {/* Suggested Prompts */}
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+        {suggestedPrompts.map((prompt, idx) => (
+          <button
+            key={idx}
+            className="px-3 py-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--secondary-text)] text-xs font-medium hover:text-[var(--primary-text)] hover:border-[var(--ai-accent)]/50 hover:bg-[var(--ai-accent)]/5 transition-all shadow-sm whitespace-nowrap"
+            onClick={() => setQuery(prompt)}
+            disabled={isProcessing || isRecording}
+          >
+            {prompt}
+          </button>
+        ))}
       </div>
     </div>
   );
