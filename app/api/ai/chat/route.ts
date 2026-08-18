@@ -270,7 +270,7 @@ Rewritten Query:`;
 
     console.log("[AI Chat Route] Stream initialized. Returning data stream response.");
 
-    return result.toUIMessageStreamResponse({
+    return new Response(result.textStream, {
       headers: {
         'Cache-Control': 'no-cache'
       }
