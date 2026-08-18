@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
 
     // Construct reset URL using the request origin
     // Fallback to localhost in development, but request.nextUrl.origin contains the actual domain
-    const origin = req.nextUrl.origin || "http://localhost:3000";
+    const origin = process.env.NEXTAUTH_URL || process.env.AUTH_URL || req.headers.get("origin") || req.nextUrl.origin || "http://localhost:3000";
     const resetUrl = `${origin}/reset-password?token=${rawToken}`;
 
     // Send email
