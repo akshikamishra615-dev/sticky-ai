@@ -334,9 +334,12 @@ export async function deleteDocument(documentId: string) {
 
   // Delete from S3
   if (document.url) {
-    await deleteFromS3(document.url).catch(e => {
+    try {
+      await deleteFromS3(document.url);
+    } catch (e) {
       console.error("[KB ERROR] Failed to delete S3 object during deleteDocument:", e);
-    });
+      throw new Error("Failed to delete the document from storage. Please try again later.");
+    }
   }
 
   await prisma.document.delete({
