@@ -16,6 +16,9 @@ const cspHeader = `
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ['pdfjs-dist', 'canvas'],
+  experimental: {
+    cpus: 1,
+  },
   async headers() {
     return [
       {
