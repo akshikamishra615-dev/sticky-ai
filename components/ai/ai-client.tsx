@@ -90,6 +90,15 @@ export function AiClient({ initialConversations, initialDocuments, userName, use
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [toastMessage, setToastMessage] = React.useState<string | null>(null);
   const [isMobileHistoryOpen, setIsMobileHistoryOpen] = React.useState(false);
+  const abortControllerRef = React.useRef<AbortController | null>(null);
+
+  const handleStop = React.useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsGenerating(false);
+  }, []);
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -166,9 +175,13 @@ export function AiClient({ initialConversations, initialDocuments, userName, use
 
     // Generate AI response
     try {
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+      abortControllerRef.current = new AbortController();
+
       const response = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: abortControllerRef.current.signal,
         body: JSON.stringify({
           conversationId: currentConversationId,
           messages: updatedConversations.find(c => c.id === currentConversationId)?.messages.map(m => ({
@@ -237,6 +250,10 @@ export function AiClient({ initialConversations, initialDocuments, userName, use
       
       // DB persistence is handled by the server onFinish callback
     } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') {
+        console.log("Stream aborted by user");
+        return;
+      }
       console.error("Failed to generate AI response:", e);
       
       // Replace the empty AI message with a safe error message if it exists, otherwise append it.
@@ -268,6 +285,7 @@ export function AiClient({ initialConversations, initialDocuments, userName, use
       }));
     } finally {
       setIsGenerating(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -301,9 +319,13 @@ export function AiClient({ initialConversations, initialDocuments, userName, use
     setIsGenerating(true);
     
     try {
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+      abortControllerRef.current = new AbortController();
+
       const response = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: abortControllerRef.current.signal,
         body: JSON.stringify({
           conversationId: activeId,
           messages: updatedMessages.map(m => ({
@@ -363,6 +385,10 @@ export function AiClient({ initialConversations, initialDocuments, userName, use
         throw new Error("AI generation failed or returned empty text.");
       }
     } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') {
+        console.log("Stream aborted by user");
+        return;
+      }
       console.error("Failed to regenerate response:", e);
       setConversations(prev => prev.map(c => {
         if (c.id !== activeId) return c;
@@ -391,6 +417,7 @@ export function AiClient({ initialConversations, initialDocuments, userName, use
       }));
     } finally {
       setIsGenerating(false);
+      abortControllerRef.current = null;
     }
   };
   const confirmDelete = async () => {
@@ -495,7 +522,7 @@ export function AiClient({ initialConversations, initialDocuments, userName, use
         {/* Input Area */}
         <div className="sticky bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-[var(--background)] 80% via-[var(--background)] to-transparent pt-10 pb-6 px-4">
           <div className="max-w-4xl mx-auto w-full">
-            <ChatInput onSend={handleSend} disabled={isGenerating} documents={initialDocuments} />
+            <ChatInput onSend={handleSend} onStop={handleStop} disabled={isGenerating} documents={initialDocuments} />
           </div>
         </div>
       </div>

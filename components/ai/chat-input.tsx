@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 
 interface ChatInputProps {
   onSend: (message: string, useRAG: boolean, language: string, documentIds?: string[]) => void;
+  onStop?: () => void;
   disabled?: boolean;
   documents?: { id: string; name: string }[];
 }
 
-export function ChatInput({ onSend, disabled, documents }: ChatInputProps) {
+export function ChatInput({ onSend, onStop, disabled, documents }: ChatInputProps) {
   const [input, setInput] = React.useState("");
   const [useRAG, setUseRAG] = React.useState(false);
   const [selectedDocs, setSelectedDocs] = React.useState<string[]>([]);
@@ -328,17 +329,28 @@ export function ChatInput({ onSend, disabled, documents }: ChatInputProps) {
               </Button>
             )}
           </div>
-          
-          <Button 
-            variant="ai" 
-            size="icon" 
-            className="rounded-full h-10 w-10 transition-all duration-300"
-            disabled={(!input.trim() && !selectedFile) || disabled || isProcessing || isRecording}
-            onClick={handleSend}
-            aria-label="Send message"
-          >
-            {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
+          {disabled && onStop ? (
+            <Button 
+              variant="outline"
+              size="icon" 
+              className="rounded-full h-10 w-10 text-[var(--error)] border-[var(--error)]/20 hover:bg-[var(--error)]/10 hover:text-[var(--error)]"
+              onClick={onStop}
+              aria-label="Stop generating"
+            >
+              <Square className="h-4 w-4 fill-current" />
+            </Button>
+          ) : (
+            <Button 
+              variant="ai" 
+              size="icon" 
+              className="rounded-full h-10 w-10 transition-all duration-300"
+              disabled={(!input.trim() && !selectedFile) || disabled || isProcessing || isRecording}
+              onClick={handleSend}
+              aria-label="Send message"
+            >
+              {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
+          )}
         </div>
       </div>
     </div>

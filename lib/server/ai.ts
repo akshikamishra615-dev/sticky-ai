@@ -237,7 +237,9 @@ ${ragContext}
 The user has enabled Knowledge Base mode. You must answer their question PRIMARILY using the provided context below.
 - Do not invent facts.
 - Distinguish clearly between document content and general knowledge.
-- Cite the relevant document and page number when making claims based on the context using this exact format: [[Source ID, Page Number]]. For example: "This is a fact [[c0a80121-0000-1000-8000-00805F9B34FB, 12]]".
+- Cite the relevant document and page number when making claims based on the context. 
+- Use this exact format: [[Source ID, Page Number]] (e.g., [[c0a80121, 12]]) if page metadata exists.
+- If page metadata does not exist for the source, use: [[Source ID]] (e.g., [[c0a80121]]).
 - Do not invent page numbers.
 - ONLY use Source IDs that are explicitly provided in the <document_context>. Do NOT invent Source IDs.
 - Do not cite sources that are not present in the retrieved context.

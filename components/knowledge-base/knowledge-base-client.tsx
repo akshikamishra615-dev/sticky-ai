@@ -52,6 +52,8 @@ export function KnowledgeBaseClient({ initialDocuments }: { initialDocuments: Do
   const [documents, setDocuments] = React.useState<DocumentType[]>(initialDocuments);
   const [uploadQueue, setUploadQueue] = React.useState<UploadItem[]>([]);
   const [toastMessage, setToastMessage] = React.useState<string | null>(null);
+  const [docToDelete, setDocToDelete] = React.useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -213,14 +215,19 @@ export function KnowledgeBaseClient({ initialDocuments }: { initialDocuments: Do
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleDelete = async (id: string) => {
+  const confirmDelete = async () => {
+    if (!docToDelete) return;
+    setIsDeleting(true);
     try {
-      await deleteDocument(id);
-      setDocuments(docs => docs.filter(d => d.id !== id));
+      await deleteDocument(docToDelete);
+      setDocuments(docs => docs.filter(d => d.id !== docToDelete));
       showToast("Document removed.");
     } catch (e) {
       console.error(e);
       showToast("Failed to remove document.");
+    } finally {
+      setIsDeleting(false);
+      setDocToDelete(null);
     }
   };
 
@@ -382,7 +389,7 @@ export function KnowledgeBaseClient({ initialDocuments }: { initialDocuments: Do
                           </Button>
                         )}
                         <button 
-                          onClick={() => handleDelete(doc.id)}
+                          onClick={() => setDocToDelete(doc.id)}
                           className="p-1.5 text-[var(--muted-text)] hover:text-[var(--error)] transition-all rounded-md hover:bg-[var(--error)]/10"
                           title="Delete document"
                         >
@@ -456,7 +463,7 @@ export function KnowledgeBaseClient({ initialDocuments }: { initialDocuments: Do
                           </div>
                           
                           <button 
-                            onClick={() => handleDelete(doc.id)}
+                            onClick={() => setDocToDelete(doc.id)}
                             className="opacity-0 group-hover:opacity-100 p-1.5 text-[var(--muted-text)] hover:text-[var(--error)] transition-all rounded-md hover:bg-[var(--error)]/10"
                             title="Delete document"
                           >
@@ -483,6 +490,21 @@ export function KnowledgeBaseClient({ initialDocuments }: { initialDocuments: Do
               </div>
             </div>
           )
+        )}
+
+        {docToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-lg max-w-sm w-full p-6 animate-in zoom-in-95">
+              <h3 className="text-lg font-bold text-[var(--primary-text)] mb-2">Delete this document?</h3>
+              <p className="text-[var(--secondary-text)] text-sm mb-6">This will permanently delete the document from your knowledge base. This action cannot be undone.</p>
+              <div className="flex gap-3 justify-end">
+                <Button variant="outline" onClick={() => setDocToDelete(null)} disabled={isDeleting}>Cancel</Button>
+                <Button className="bg-[var(--error)] text-white hover:bg-[var(--error)]/90" onClick={confirmDelete} disabled={isDeleting}>
+                  {isDeleting ? "Deleting..." : "Delete"}
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Toast Notification */}

@@ -21,9 +21,11 @@ export function ChatMessage({ message, onRegenerate, userName = "User", userImag
   const [copied, setCopied] = React.useState(false);
   const [feedback, setFeedback] = React.useState<"up" | "down" | null>(null);
 
-  // Pre-process citations: [[docId, page]] -> [page](citation://docId/page)
+  // Pre-process citations: [[docId, page]] -> [page](citation://docId/page) or [[docId]] -> [doc](citation://docId/null)
   const processedContent = isAi 
-    ? message.content.replace(/\[\[([a-zA-Z0-9-]+),\s*([^\]]+)\]\]/g, '[$2](citation://$1/$2)')
+    ? message.content
+        .replace(/\[\[([a-zA-Z0-9-]+),\s*([^\]]+)\]\]/g, '[$2](citation://$1/$2)')
+        .replace(/\[\[([a-zA-Z0-9-]+)\]\]/g, '[doc](citation://$1/null)')
     : message.content;
 
   const handleCopy = () => {
@@ -92,6 +94,13 @@ export function ChatMessage({ message, onRegenerate, userName = "User", userImag
                   if (href?.startsWith('citation://')) {
                     const [, docId, page] = href.replace('citation://', '').split('/');
                     const docName = documents?.find(d => d.id === docId)?.name || "Document";
+                    if (page === 'null' || !page) {
+                      return (
+                        <span className="inline-flex items-center gap-1 mx-1 px-1.5 py-0.5 rounded bg-[var(--ai-accent)]/10 border border-[var(--ai-accent)]/20 text-[var(--ai-accent)] text-[10px] font-semibold cursor-help" title={`${docName}`}>
+                          [Source]
+                        </span>
+                      );
+                    }
                     return (
                       <span className="inline-flex items-center gap-1 mx-1 px-1.5 py-0.5 rounded bg-[var(--ai-accent)]/10 border border-[var(--ai-accent)]/20 text-[var(--ai-accent)] text-[10px] font-semibold cursor-help" title={`${docName} (Page ${page})`}>
                         Pg {page}
