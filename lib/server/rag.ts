@@ -299,24 +299,62 @@ function chunkText(text: string, maxChunkSize = 1000, overlap = 200) {
   return chunks;
 }
 
-export async function getDocuments() {
+export async function getDocuments(options?: { page?: number; q?: string; status?: string; pageSize?: number }) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
 
-  return prisma.document.findMany({
-    where: { userId: session.user.id },
-    orderBy: { updatedAt: "desc" },
-    select: {
-      id: true,
-      name: true,
-      size: true,
-      status: true,
-      errorCode: true,
-      errorMessage: true,
-      createdAt: true,
-      updatedAt: true
+  const page = options?.page || 1;
+  const pageSize = options?.pageSize || 12;
+  const skip = (page - 1) * pageSize;
+  const q = options?.q?.trim();
+  const status = options?.status;
+
+  const where: Prisma.DocumentWhereInput = {
+    userId: session.user.id
+  };
+
+  if (q) {
+    where.name = {
+      contains: q,
+      mode: 'insensitive'
+    };
+  }
+
+  if (status && status !== 'ALL') {
+    if (status === 'PROCESSING') {
+      where.status = {
+        in: ['QUEUED', 'PROCESSING_DOCUMENT', 'OCR_SCANNING', 'GENERATING_EMBEDDINGS', 'INDEXING', 'PROCESSING_PDF', 'UPLOADING']
+      };
+    } else {
+      where.status = status;
     }
-  });
+  }
+
+  const [documents, total] = await Promise.all([
+    prisma.document.findMany({
+      where,
+      orderBy: { updatedAt: "desc" },
+      skip,
+      take: pageSize,
+      select: {
+        id: true,
+        name: true,
+        size: true,
+        status: true,
+        errorCode: true,
+        errorMessage: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    }),
+    prisma.document.count({ where })
+  ]);
+
+  return {
+    documents,
+    total,
+    totalPages: Math.ceil(total / pageSize)
+  };
 }
 
 export async function deleteDocument(documentId: string) {

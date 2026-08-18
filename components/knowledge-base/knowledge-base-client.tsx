@@ -48,14 +48,42 @@ const RETRYABLE_ERRORS = [
   "UNKNOWN_PROCESSING_ERROR"
 ];
 
-export function KnowledgeBaseClient({ initialDocuments }: { initialDocuments: DocumentType[] }) {
+export function KnowledgeBaseClient({ 
+  initialDocuments, 
+  total = 0,
+  totalPages = 1,
+  currentPage = 1,
+  currentSearch = "",
+  currentStatus = "ALL"
+}: { 
+  initialDocuments: DocumentType[];
+  total?: number;
+  totalPages?: number;
+  currentPage?: number;
+  currentSearch?: string;
+  currentStatus?: string;
+}) {
   const [documents, setDocuments] = React.useState<DocumentType[]>(initialDocuments);
   const [uploadQueue, setUploadQueue] = React.useState<UploadItem[]>([]);
   const [toastMessage, setToastMessage] = React.useState<string | null>(null);
   const [docToDelete, setDocToDelete] = React.useState<string | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const [searchInput, setSearchInput] = React.useState(currentSearch);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const router = useRouter();
+
+  React.useEffect(() => {
+    const handler = setTimeout(() => {
+      if (searchInput !== currentSearch) {
+        const params = new URLSearchParams(window.location.search);
+        if (searchInput) params.set("q", searchInput);
+        else params.delete("q");
+        params.set("page", "1");
+        router.push(`?${params.toString()}`);
+      }
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchInput, currentSearch, router]);
 
   React.useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -304,6 +332,31 @@ export function KnowledgeBaseClient({ initialDocuments }: { initialDocuments: Do
             multiple
           />
         </header>
+        
+        <div className="flex flex-col sm:flex-row gap-4 mb-8">
+          <input 
+            type="text" 
+            placeholder="Search documents..."
+            className="flex-1 px-4 py-2 text-sm bg-[var(--surface)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ai-accent)] text-[var(--primary-text)]"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+          <select
+            className="px-4 py-2 text-sm bg-[var(--surface)] border border-[var(--border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ai-accent)] text-[var(--primary-text)]"
+            value={currentStatus}
+            onChange={(e) => {
+              const params = new URLSearchParams(window.location.search);
+              params.set("status", e.target.value);
+              params.set("page", "1");
+              router.push(`?${params.toString()}`);
+            }}
+          >
+            <option value="ALL">All Status</option>
+            <option value="READY">Ready</option>
+            <option value="PROCESSING">Processing</option>
+            <option value="FAILED">Failed</option>
+          </select>
+        </div>
 
         {hasActiveUploads && (
           <div className="mb-10">
@@ -425,27 +478,47 @@ export function KnowledgeBaseClient({ initialDocuments }: { initialDocuments: Do
         )}
 
         {documents.length === 0 && uploadQueue.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-12 text-center">
-            <UploadCloud className="mb-4 h-10 w-10 text-[var(--muted-text)]" />
-            <h3 className="text-lg font-semibold text-[var(--primary-text)]">No documents yet</h3>
-            <p className="mt-2 text-sm text-[var(--secondary-text)] max-w-md">
-              Upload your documents to create a personal knowledge base. PDF, Word, PowerPoint, Excel, CSV, TXT and images supported.
-            </p>
-            <Button 
-              className="mt-6"
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              Select Documents
-            </Button>
-          </div>
+          (currentSearch || currentStatus !== 'ALL') ? (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-12 text-center">
+              <AlertCircle className="mb-4 h-10 w-10 text-[var(--muted-text)]" />
+              <h3 className="text-lg font-semibold text-[var(--primary-text)]">No results found</h3>
+              <p className="mt-2 text-sm text-[var(--secondary-text)] max-w-md">
+                Try adjusting your search query or filters.
+              </p>
+              <Button 
+                className="mt-6"
+                variant="outline"
+                onClick={() => {
+                  setSearchInput("");
+                  router.push(window.location.pathname);
+                }}
+              >
+                Clear Filters
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-12 text-center">
+              <UploadCloud className="mb-4 h-10 w-10 text-[var(--muted-text)]" />
+              <h3 className="text-lg font-semibold text-[var(--primary-text)]">No documents yet</h3>
+              <p className="mt-2 text-sm text-[var(--secondary-text)] max-w-md">
+                Upload your documents to create a personal knowledge base. PDF, Word, PowerPoint, Excel, CSV, TXT and images supported.
+              </p>
+              <Button 
+                className="mt-6"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Select Documents
+              </Button>
+            </div>
+          )
         ) : (
           readyDocs.length > 0 && (
-            <div>
+            <div className="flex flex-col min-h-[400px]">
               <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--muted-text)] mb-4">
                 Knowledge Base
               </h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 flex-1 content-start">
                 {readyDocs.map((doc) => {
                   const display = getStatusDisplay(doc.status);
                   return (
@@ -490,6 +563,41 @@ export function KnowledgeBaseClient({ initialDocuments }: { initialDocuments: Do
               </div>
             </div>
           )
+        )}
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (documents.length > 0) && (
+          <div className="mt-8 flex items-center justify-between border-t border-[var(--border)] pt-4">
+            <p className="text-sm text-[var(--secondary-text)]">
+              Showing <span className="font-medium text-[var(--primary-text)]">{documents.length}</span> of <span className="font-medium text-[var(--primary-text)]">{total}</span> documents
+            </p>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                disabled={currentPage <= 1}
+                onClick={() => {
+                  const params = new URLSearchParams(window.location.search);
+                  params.set("page", String(currentPage - 1));
+                  router.push(`?${params.toString()}`);
+                }}
+              >
+                Previous
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                disabled={currentPage >= totalPages}
+                onClick={() => {
+                  const params = new URLSearchParams(window.location.search);
+                  params.set("page", String(currentPage + 1));
+                  router.push(`?${params.toString()}`);
+                }}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
         )}
 
         {docToDelete && (
